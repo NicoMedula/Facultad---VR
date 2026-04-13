@@ -290,6 +290,89 @@
           window.removeEventListener("keyup", this.onKeyUp);
         },
       });
+
+      // ============================================
+      // COMPONENTE THUMBSTICK-LOCOMOTION
+      // Locomoción suave con joystick del Quest.
+      // Respeta la colisión del player-movement.
+      // ============================================
+      AFRAME.registerComponent("thumbstick-locomotion", {
+        schema: {
+          rig: { type: "selector" },
+          camera: { type: "selector" },
+          speed: { type: "number", default: 3 },
+          deadzone: { type: "number", default: 0.15 },
+        },
+
+        init: function () {
+          this.axis = { x: 0, y: 0 };
+          this.forward = new THREE.Vector3();
+          this.rightDir = new THREE.Vector3();
+
+          var self = this;
+          this.onAxisMove = function (evt) {
+            var a = evt.detail.axis;
+            // xr-standard: [0,1]=touchpad, [2,3]=thumbstick
+            if (a && a.length >= 4) {
+              self.axis.x = a[2];
+              self.axis.y = a[3];
+            } else if (a && a.length >= 2) {
+              self.axis.x = a[0];
+              self.axis.y = a[1];
+            }
+          };
+          this.el.addEventListener("axismove", this.onAxisMove);
+        },
+
+        tick: function (time, delta) {
+          if (!delta || delta > 200) return;
+          var dz = this.data.deadzone;
+          var ax = Math.abs(this.axis.x) < dz ? 0 : this.axis.x;
+          var ay = Math.abs(this.axis.y) < dz ? 0 : this.axis.y;
+          if (ax === 0 && ay === 0) return;
+
+          var rig = this.data.rig;
+          var cam = this.data.camera;
+          if (!rig || !cam) return;
+
+          // Dirección según la cámara (HMD)
+          this.forward.set(0, 0, -1).applyQuaternion(cam.object3D.quaternion);
+          this.forward.y = 0;
+          if (this.forward.length() > 0.001) this.forward.normalize();
+          this.rightDir.set(1, 0, 0).applyQuaternion(cam.object3D.quaternion);
+          this.rightDir.y = 0;
+          if (this.rightDir.length() > 0.001) this.rightDir.normalize();
+
+          // ay es adelante/atrás (negativo = adelante), ax es lateral
+          var moveX = this.rightDir.x * ax - this.forward.x * ay;
+          var moveZ = this.rightDir.z * ax - this.forward.z * ay;
+
+          var len = Math.sqrt(moveX * moveX + moveZ * moveZ);
+          if (len < 0.01) return;
+          var dt = delta / 1000;
+          var mag = Math.min(Math.sqrt(ax * ax + ay * ay), 1);
+          moveX = (moveX / len) * this.data.speed * dt * mag;
+          moveZ = (moveZ / len) * this.data.speed * dt * mag;
+
+          var pos = rig.object3D.position;
+          var pm = rig.components["player-movement"];
+          var newX = pos.x + moveX;
+          var newZ = pos.z + moveZ;
+
+          // Reutilizar colisión de player-movement si está lista
+          if (pm && pm.ready) {
+            if (!pm.checkCollision(newX, pos.z)) pos.x = newX;
+            if (!pm.checkCollision(pos.x, newZ)) pos.z = newZ;
+          } else {
+            pos.x = newX;
+            pos.z = newZ;
+          }
+        },
+
+        remove: function () {
+          this.el.removeEventListener("axismove", this.onAxisMove);
+        },
+      });
     </script>
 
     <style>
@@ -1409,16 +1492,17 @@
           ></a-cursor>
         </a-camera>
 
-        <!-- Controlador izquierdo con teletransporte + interacción -->
+        <!-- Controlador izquierdo: locomoción con thumbstick + teleport (grip) + laser -->
         <a-entity
           id="leftHand"
           laser-controls="hand: left"
           raycaster="objects: .clickable; far: 50; recursive: true"
+          thumbstick-locomotion="rig: #rig; camera: #camera; speed: 3"
           teleport-controls="
             cameraRig: #rig;
             teleportOrigin: #camera;
             type: parabolic;
-            button: trigger;
+            button: grip;
             collisionEntities: #pasillo-suelo, #aula1-suelo, #aula2-suelo;
             curveHitColor: #4CAF50;
             curveMissColor: #FF5722;
@@ -1428,7 +1512,7 @@
             landingMaxAngle: 45"
         ></a-entity>
 
-        <!-- Controlador derecho con teletransporte + interacción -->
+        <!-- Controlador derecho: teleport (grip) + laser -->
         <a-entity
           id="rightHand"
           laser-controls="hand: right"
@@ -1437,7 +1521,7 @@
             cameraRig: #rig;
             teleportOrigin: #camera;
             type: parabolic;
-            button: trigger;
+            button: grip;
             collisionEntities: #pasillo-suelo, #aula1-suelo, #aula2-suelo;
             curveHitColor: #4CAF50;
             curveMissColor: #FF5722;
