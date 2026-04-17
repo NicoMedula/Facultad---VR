@@ -58,6 +58,33 @@
         handleClick: function () {
           var action = this.data;
           console.log("🔘 Boton:", action);
+          var mathMenu = document.getElementById("math-menu");
+          var functionDisplay = document.getElementById("function-display");
+          var algMenu = document.getElementById("alg-menu");
+          var algDisplay = document.getElementById("algorithm-display");
+          var mathMenuVisible =
+            mathMenu && mathMenu.getAttribute("visible") !== false;
+          var functionDisplayVisible =
+            functionDisplay && functionDisplay.getAttribute("visible") !== false;
+          var algMenuVisible = algMenu && algMenu.getAttribute("visible") !== false;
+          var algDisplayVisible =
+            algDisplay && algDisplay.getAttribute("visible") !== false;
+
+          if (action.indexOf("func") === 0 && !mathMenuVisible) return;
+          if (action === "back-math" && !functionDisplayVisible) return;
+          if (action.indexOf("algo-") === 0 && !algMenuVisible) return;
+
+          if (
+            (action === "back-algo" ||
+              action === "restart-algo" ||
+              action === "pause-algo" ||
+              action === "back-step-algo" ||
+              action === "slow-algo") &&
+            !algDisplayVisible
+          ) {
+            return;
+          }
+
           switch (action) {
             case "func1":
               showFunction("func1");
@@ -86,11 +113,26 @@
             case "algo-quick":
               showAlgorithm("quick");
               break;
+            case "algo-baraja":
+              showAlgorithm("baraja");
+              break;
+            case "algo-intercambio":
+              showAlgorithm("intercambio");
+              break;
             case "back-algo":
               stopAlgorithmAnimations({ resetDisplay: true });
               break;
             case "restart-algo":
               if (currentAlgorithm) showAlgorithm(currentAlgorithm);
+              break;
+            case "pause-algo":
+              toggleAlgorithmPause();
+              break;
+            case "back-step-algo":
+              stepAlgorithmBack();
+              break;
+            case "slow-algo":
+              slowAlgorithm();
               break;
           }
         },
@@ -1054,36 +1096,40 @@
           ></a-text>
 
           <!-- Superficie matemática 3D -->
-          <a-entity id="math-surface" position="0 1.5 0"></a-entity>
+          <a-entity
+            id="math-surface"
+            position="0 1.5 0"
+            scale="0.65 0.65 0.65"
+          ></a-entity>
 
           <!-- Ejes de coordenadas -->
           <a-cylinder
             position="0 1.5 0"
             rotation="0 0 90"
-            height="4"
-            radius="0.015"
+            height="2.6"
+            radius="0.011"
             color="red"
           ></a-cylinder>
-          <a-text value="X" position="2.2 1.5 0" color="red" width="3"></a-text>
+          <a-text value="X" position="1.5 1.5 0" color="red" width="2"></a-text>
           <a-cylinder
             position="0 1.5 0"
-            height="4"
-            radius="0.015"
+            height="2.6"
+            radius="0.011"
             color="green"
           ></a-cylinder>
-          <a-text value="Y" position="0 3.7 0" color="green" width="3"></a-text>
+          <a-text value="Y" position="0 2.95 0" color="green" width="2"></a-text>
           <a-cylinder
             position="0 1.5 0"
             rotation="90 0 0"
-            height="4"
-            radius="0.015"
+            height="2.6"
+            radius="0.011"
             color="blue"
           ></a-cylinder>
           <a-text
             value="Z"
-            position="0 1.5 2.2"
+            position="0 1.5 1.5"
             color="blue"
-            width="3"
+            width="2"
           ></a-text>
 
           <!-- Botón volver al menú -->
@@ -1301,7 +1347,7 @@
 
           <a-entity
             id="btn-algo1"
-            position="-1 0 0"
+            position="-1.1 0.05 0"
             class="clickable"
             btn-action="algo-bubble"
           >
@@ -1324,7 +1370,7 @@
           </a-entity>
           <a-entity
             id="btn-algo2"
-            position="0 0 0"
+            position="0 0.05 0"
             class="clickable"
             btn-action="algo-insertion"
           >
@@ -1347,7 +1393,7 @@
           </a-entity>
           <a-entity
             id="btn-algo3"
-            position="1 0 0"
+            position="1.1 0.05 0"
             class="clickable"
             btn-action="algo-quick"
           >
@@ -1368,6 +1414,52 @@
               position="0 0 0.03"
             ></a-text>
           </a-entity>
+          <a-entity
+            id="btn-algo4"
+            position="-0.75 -0.4 0"
+            class="clickable"
+            btn-action="algo-baraja"
+          >
+            <a-box
+              width="1.35"
+              height="0.3"
+              depth="0.05"
+              color="#8BC34A"
+              opacity="0.9"
+              animation__mouseenter="property: scale; to: 1.1 1.1 1.1; startEvents: mouseenter; dur: 200"
+              animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200"
+            ></a-box>
+            <a-text
+              value="Baraja"
+              align="center"
+              color="#fff"
+              width="2.5"
+              position="0 0 0.03"
+            ></a-text>
+          </a-entity>
+          <a-entity
+            id="btn-algo5"
+            position="0.75 -0.4 0"
+            class="clickable"
+            btn-action="algo-intercambio"
+          >
+            <a-box
+              width="1.35"
+              height="0.3"
+              depth="0.05"
+              color="#FF9800"
+              opacity="0.9"
+              animation__mouseenter="property: scale; to: 1.1 1.1 1.1; startEvents: mouseenter; dur: 200"
+              animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200"
+            ></a-box>
+            <a-text
+              value="Intercambio Directo"
+              align="center"
+              color="#fff"
+              width="2.4"
+              position="0 0 0.03"
+            ></a-text>
+          </a-entity>
         </a-entity>
 
         <!-- Área de visualización de algoritmos (centro del aula) -->
@@ -1382,8 +1474,12 @@
             width="6"
           ></a-text>
 
-          <!-- Contenedor de cubos del array -->
-          <a-entity id="algo-surface" position="0 1.2 0"></a-entity>
+          <!-- Contenedor de cubos del array (pegado a la pared del pizarrón) -->
+          <a-entity
+            id="algo-surface"
+            position="3.2 1.65 0"
+            rotation="0 -90 0"
+          ></a-entity>
 
           <!-- Botón volver al menú -->
           <a-entity
@@ -1433,6 +1529,84 @@
               align="center"
               color="#fff"
               width="2.5"
+              position="0 0 0.04"
+            ></a-text>
+          </a-entity>
+
+          <!-- Controles de reproduccion de la animacion -->
+          <a-entity
+            id="btn-pause-algo"
+            position="3.2 0.85 -0.95"
+            rotation="0 -90 0"
+            class="clickable"
+            btn-action="pause-algo"
+          >
+            <a-box
+              width="0.85"
+              height="0.24"
+              depth="0.06"
+              color="#2196F3"
+              opacity="0.9"
+              animation__mouseenter="property: scale; to: 1.1 1.1 1.1; startEvents: mouseenter; dur: 200"
+              animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200"
+            ></a-box>
+            <a-text
+              id="pause-algo-label"
+              value="Pausar"
+              align="center"
+              color="#fff"
+              width="2.1"
+              position="0 0 0.04"
+            ></a-text>
+          </a-entity>
+
+          <a-entity
+            id="btn-back-step-algo"
+            position="3.2 0.85 0"
+            rotation="0 -90 0"
+            class="clickable"
+            btn-action="back-step-algo"
+          >
+            <a-box
+              width="0.85"
+              height="0.24"
+              depth="0.06"
+              color="#607D8B"
+              opacity="0.9"
+              animation__mouseenter="property: scale; to: 1.1 1.1 1.1; startEvents: mouseenter; dur: 200"
+              animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200"
+            ></a-box>
+            <a-text
+              value="Atras"
+              align="center"
+              color="#fff"
+              width="2.1"
+              position="0 0 0.04"
+            ></a-text>
+          </a-entity>
+
+          <a-entity
+            id="btn-slow-algo"
+            position="3.2 0.85 0.95"
+            rotation="0 -90 0"
+            class="clickable"
+            btn-action="slow-algo"
+          >
+            <a-box
+              width="0.85"
+              height="0.24"
+              depth="0.06"
+              color="#795548"
+              opacity="0.9"
+              animation__mouseenter="property: scale; to: 1.1 1.1 1.1; startEvents: mouseenter; dur: 200"
+              animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200"
+            ></a-box>
+            <a-text
+              id="slow-algo-label"
+              value="Vel 1x"
+              align="center"
+              color="#fff"
+              width="2.1"
               position="0 0 0.04"
             ></a-text>
           </a-entity>
@@ -1561,6 +1735,12 @@
       var currentFunction = null;
       var currentAlgorithm = null;
       var isSorting = false;
+      var algorithmState = null;
+      var algorithmSpeedOptions = [
+        { label: "Vel 1x", factor: 1 },
+        { label: "Lento", factor: 1.6 },
+        { label: "Muy lento", factor: 2.4 },
+      ];
       var lastRenderTime = 0;
       var isRenderingFunction = false;
 
@@ -1753,6 +1933,7 @@
         algorithmTimeouts.forEach(clearTimeout);
         algorithmTimeouts = [];
         isSorting = false;
+        algorithmState = null;
         var pi = document.getElementById("progress-indicator");
         if (pi && pi.parentNode) pi.parentNode.removeChild(pi);
         var ad = document.getElementById("array-display");
@@ -1778,6 +1959,33 @@
         return id;
       }
 
+      function updateAlgorithmControlLabels() {
+        var pauseLabel = document.getElementById("pause-algo-label");
+        var slowLabel = document.getElementById("slow-algo-label");
+        if (pauseLabel) {
+          pauseLabel.setAttribute(
+            "value",
+            algorithmState && algorithmState.paused ? "Reanudar" : "Pausar",
+          );
+        }
+        if (slowLabel) {
+          var speedIndex = algorithmState ? algorithmState.speedIndex : 0;
+          slowLabel.setAttribute(
+            "value",
+            algorithmSpeedOptions[speedIndex].label,
+          );
+        }
+      }
+
+      function resetAlgorithmCubeColors(parent) {
+        if (!parent) return;
+        var all = parent.querySelectorAll(".algo-cube");
+        all.forEach(function (c) {
+          var b = c.querySelector(".cube-body");
+          if (b) b.setAttribute("color", "#8BC34A");
+        });
+      }
+
       function showAlgorithm(algoKey) {
         stopAlgorithmAnimations();
         currentAlgorithm = algoKey;
@@ -1790,6 +1998,8 @@
             bubble: "Bubble Sort",
             insertion: "Insertion Sort",
             quick: "Quick Sort",
+            baraja: "Baraja",
+            intercambio: "Intercambio Directo",
           }[algoKey] || "Algoritmo";
         document
           .getElementById("current-algo-title")
@@ -1802,6 +2012,9 @@
             "Compara elementos adyacentes e intercambia si estan en orden incorrecto.",
           insertion: "Toma elementos e inserta en la posicion correcta.",
           quick: "Selecciona un pivote y reorganiza los elementos.",
+          baraja: "Ordena como una baraja: toma cada elemento y lo inserta donde corresponde.",
+          intercambio:
+            "Compara pares vecinos e intercambia directamente cuando estan invertidos.",
         };
         document.getElementById("functionDescription").textContent =
           descs[algoKey] || "";
@@ -1815,7 +2028,7 @@
       }
 
       function generateRandomArray() {
-        var numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        var numbers = [1, 2, 3, 4, 5, 6, 7];
         for (var i = numbers.length - 1; i > 0; i--) {
           var j = Math.floor(Math.random() * (i + 1));
           var temp = numbers[i];
@@ -1863,7 +2076,7 @@
 
       function getSortingSteps(algo, arr) {
         var steps = [];
-        if (algo === "bubble") {
+        if (algo === "bubble" || algo === "intercambio") {
           for (var i = 0; i < arr.length - 1; i++) {
             for (var j = 0; j < arr.length - 1 - i; j++) {
               steps.push({ type: "compare", i: j, j: j + 1 });
@@ -1875,7 +2088,7 @@
               }
             }
           }
-        } else if (algo === "insertion") {
+        } else if (algo === "insertion" || algo === "baraja") {
           for (var i2 = 1; i2 < arr.length; i2++) {
             var j2 = i2;
             while (j2 > 0) {
@@ -1918,111 +2131,262 @@
 
       function animateAlgorithmSteps(steps, delayMs, algorithmType) {
         isSorting = true;
-        var parent = document.getElementById("algo-surface");
+        algorithmState = {
+          steps: steps,
+          stepIndex: 0,
+          baseDelay: delayMs,
+          speedIndex: 0,
+          paused: false,
+          locked: false,
+          finished: false,
+          parent: document.getElementById("algo-surface"),
+          algorithmType: algorithmType,
+        };
+        updateAlgorithmControlLabels();
+        scheduleNextAlgorithmStep(300);
+      }
 
-        function findCube(idx) {
-          return parent.querySelector('.algo-cube[data-index="' + idx + '"]');
+      function getAlgorithmDelay() {
+        if (!algorithmState) return 800;
+        return (
+          algorithmState.baseDelay *
+          algorithmSpeedOptions[algorithmState.speedIndex].factor
+        );
+      }
+
+      function findAlgorithmCube(idx) {
+        if (!algorithmState || !algorithmState.parent) return null;
+        return algorithmState.parent.querySelector(
+          '.algo-cube[data-index="' + idx + '"]',
+        );
+      }
+
+      function readAlgorithmCubePos(el) {
+        if (!el) return [0, 0, 0];
+        var p = el.getAttribute("position");
+        if (!p) return [0, 0, 0];
+        if (typeof p === "string") {
+          var pp = p.split(" ").map(parseFloat);
+          return [pp[0] || 0, pp[1] || 0, pp[2] || 0];
         }
-        function readPos(el) {
-          if (!el) return [0, 0, 0];
-          var p = el.getAttribute("position");
-          if (!p) return [0, 0, 0];
-          if (typeof p === "string") {
-            var pp = p.split(" ").map(parseFloat);
-            return [pp[0] || 0, pp[1] || 0, pp[2] || 0];
-          }
-          return [p.x || 0, p.y || 0, p.z || 0];
-        }
+        return [p.x || 0, p.y || 0, p.z || 0];
+      }
 
-        function performSwap(i, j, dur) {
-          var aEl = findCube(i),
-            bEl = findCube(j);
-          if (!aEl || !bEl) return;
-
-          var posA = readPos(aEl),
-            posB = readPos(bEl);
-
-          aEl.setAttribute("animation__swap", {
-            property: "position",
-            to: posB[0] + " " + posA[1] + " " + posA[2],
-            dur: dur,
-            easing: "easeInOutQuad",
-          });
-
-          bEl.setAttribute("animation__swap", {
-            property: "position",
-            to: posA[0] + " " + posB[1] + " " + posB[2],
-            dur: dur,
-            easing: "easeInOutQuad",
-          });
-
-          var bodyA = aEl.querySelector(".cube-body");
-          var bodyB = bEl.querySelector(".cube-body");
-
-          if (bodyA) bodyA.setAttribute("color", "#FF9800");
-          if (bodyB) bodyB.setAttribute("color", "#FF9800");
-
-          setTimeout(function () {
-            var idxA = aEl.getAttribute("data-index");
-            var idxB = bEl.getAttribute("data-index");
-
-            aEl.setAttribute("data-index", idxB);
-            bEl.setAttribute("data-index", idxA);
-
-            aEl.setAttribute(
-              "position",
-              posB[0] + " " + posA[1] + " " + posA[2]
-            );
-            bEl.setAttribute(
-              "position",
-              posA[0] + " " + posB[1] + " " + posB[2]
-            );
-
-            if (bodyA) bodyA.setAttribute("color", "#8BC34A");
-            if (bodyB) bodyB.setAttribute("color", "#8BC34A");
-
-            aEl.removeAttribute("animation__swap");
-            bEl.removeAttribute("animation__swap");
-          }, dur);
+      function performAlgorithmSwap(i, j, dur, cb) {
+        var aEl = findAlgorithmCube(i);
+        var bEl = findAlgorithmCube(j);
+        if (!aEl || !bEl) {
+          if (cb) cb();
+          return;
         }
 
-        steps.forEach(function (step, idx) {
-          scheduleAlgorithmTimeout(function () {
-            if (!isSorting) return;
-            if (step.type === "compare") {
-              var cA = findCube(step.i),
-                cB = findCube(step.j);
-              if (cA) {
-                var b = cA.querySelector(".cube-body");
-                if (b) b.setAttribute("color", "#FFEB3B");
-              }
-              if (cB) {
-                var b2 = cB.querySelector(".cube-body");
-                if (b2) b2.setAttribute("color", "#FFEB3B");
-              }
-            } else if (step.type === "swap") {
-              performSwap(step.i, step.j, 600);
-            } else if (step.type === "pivot") {
-              var pv = findCube(step.index);
-              if (pv) {
-                var pb = pv.querySelector(".cube-body");
-                if (pb) pb.setAttribute("color", "#9C27B0");
-              }
-            }
-            if (idx === steps.length - 1) {
-              scheduleAlgorithmTimeout(function () {
-                var all = parent.querySelectorAll(".algo-cube");
-                all.forEach(function (c) {
-                  var b = c.querySelector(".cube-body");
-                  if (b) b.setAttribute("color", "#8BC34A");
-                });
-                isSorting = false;
-                document.getElementById("functionDomain").textContent =
-                  "Ordenamiento completado!";
-              }, 700);
-            }
-          }, idx * delayMs);
+        var posA = readAlgorithmCubePos(aEl);
+        var posB = readAlgorithmCubePos(bEl);
+
+        aEl.setAttribute("animation__swap", {
+          property: "position",
+          to: posB[0] + " " + posA[1] + " " + posA[2],
+          dur: dur,
+          easing: "easeInOutQuad",
         });
+        bEl.setAttribute("animation__swap", {
+          property: "position",
+          to: posA[0] + " " + posB[1] + " " + posB[2],
+          dur: dur,
+          easing: "easeInOutQuad",
+        });
+
+        var bodyA = aEl.querySelector(".cube-body");
+        var bodyB = bEl.querySelector(".cube-body");
+        if (bodyA) bodyA.setAttribute("color", "#FF9800");
+        if (bodyB) bodyB.setAttribute("color", "#FF9800");
+
+        scheduleAlgorithmTimeout(function () {
+          var idxA = aEl.getAttribute("data-index");
+          var idxB = bEl.getAttribute("data-index");
+          aEl.setAttribute("data-index", idxB);
+          bEl.setAttribute("data-index", idxA);
+          aEl.setAttribute(
+            "position",
+            posB[0] + " " + posA[1] + " " + posA[2],
+          );
+          bEl.setAttribute(
+            "position",
+            posA[0] + " " + posB[1] + " " + posB[2],
+          );
+          if (bodyA) bodyA.setAttribute("color", "#8BC34A");
+          if (bodyB) bodyB.setAttribute("color", "#8BC34A");
+          aEl.removeAttribute("animation__swap");
+          bEl.removeAttribute("animation__swap");
+          if (cb) cb();
+        }, dur);
+      }
+
+      function applyAlgorithmStep(step, cb) {
+        if (!algorithmState) {
+          if (cb) cb();
+          return;
+        }
+        var parent = algorithmState.parent;
+        var factor = algorithmSpeedOptions[algorithmState.speedIndex].factor;
+        resetAlgorithmCubeColors(parent);
+
+        if (step.type === "compare") {
+          var cA = findAlgorithmCube(step.i);
+          var cB = findAlgorithmCube(step.j);
+          if (cA) {
+            var b = cA.querySelector(".cube-body");
+            if (b) b.setAttribute("color", "#FFEB3B");
+          }
+          if (cB) {
+            var b2 = cB.querySelector(".cube-body");
+            if (b2) b2.setAttribute("color", "#FFEB3B");
+          }
+          scheduleAlgorithmTimeout(function () {
+            if (cb) cb();
+          }, 280 * factor);
+        } else if (step.type === "swap") {
+          performAlgorithmSwap(step.i, step.j, 600 * factor, cb);
+        } else if (step.type === "pivot") {
+          var pv = findAlgorithmCube(step.index);
+          if (pv) {
+            var pb = pv.querySelector(".cube-body");
+            if (pb) pb.setAttribute("color", "#9C27B0");
+          }
+          scheduleAlgorithmTimeout(function () {
+            if (cb) cb();
+          }, 350 * factor);
+        } else if (cb) {
+          cb();
+        }
+      }
+
+      function scheduleNextAlgorithmStep(delayOverride) {
+        if (
+          !algorithmState ||
+          algorithmState.paused ||
+          algorithmState.locked ||
+          algorithmState.finished
+        ) {
+          return;
+        }
+        var delay =
+          typeof delayOverride === "number" ? delayOverride : getAlgorithmDelay();
+        scheduleAlgorithmTimeout(function () {
+          runNextAlgorithmStep();
+        }, delay);
+      }
+
+      function runNextAlgorithmStep() {
+        if (
+          !algorithmState ||
+          algorithmState.paused ||
+          algorithmState.locked ||
+          algorithmState.finished
+        ) {
+          return;
+        }
+        if (algorithmState.stepIndex >= algorithmState.steps.length) {
+          finishAlgorithmAnimation();
+          return;
+        }
+
+        var step = algorithmState.steps[algorithmState.stepIndex];
+        algorithmState.locked = true;
+        applyAlgorithmStep(step, function () {
+          if (!algorithmState) return;
+          algorithmState.stepIndex++;
+          algorithmState.locked = false;
+          if (algorithmState.stepIndex >= algorithmState.steps.length) {
+            finishAlgorithmAnimation();
+          } else {
+            scheduleNextAlgorithmStep();
+          }
+        });
+      }
+
+      function finishAlgorithmAnimation() {
+        if (!algorithmState) return;
+        resetAlgorithmCubeColors(algorithmState.parent);
+        algorithmState.finished = true;
+        algorithmState.paused = false;
+        isSorting = false;
+        updateAlgorithmControlLabels();
+        document.getElementById("functionDomain").textContent =
+          "Ordenamiento completado!";
+      }
+
+      function toggleAlgorithmPause() {
+        if (!algorithmState || algorithmState.finished) return;
+        algorithmState.paused = !algorithmState.paused;
+        if (algorithmState.paused) {
+          if (!algorithmState.locked) {
+            algorithmTimeouts.forEach(clearTimeout);
+            algorithmTimeouts = [];
+          }
+          document.getElementById("functionDomain").textContent =
+            "Animacion pausada";
+        } else {
+          isSorting = true;
+          document.getElementById("functionDomain").textContent =
+            "Animacion reanudada";
+          scheduleNextAlgorithmStep(250);
+        }
+        updateAlgorithmControlLabels();
+      }
+
+      function stepAlgorithmBack() {
+        if (!algorithmState || algorithmState.locked) return;
+        algorithmTimeouts.forEach(clearTimeout);
+        algorithmTimeouts = [];
+        algorithmState.paused = true;
+        algorithmState.finished = false;
+        isSorting = true;
+        updateAlgorithmControlLabels();
+
+        var previousSwap = null;
+        while (algorithmState.stepIndex > 0) {
+          algorithmState.stepIndex--;
+          var step = algorithmState.steps[algorithmState.stepIndex];
+          if (step.type === "swap") {
+            previousSwap = step;
+            break;
+          }
+        }
+
+        if (!previousSwap) {
+          resetAlgorithmCubeColors(algorithmState.parent);
+          document.getElementById("functionDomain").textContent =
+            "Ya estas al inicio del ordenamiento";
+          return;
+        }
+
+        algorithmState.locked = true;
+        document.getElementById("functionDomain").textContent =
+          "Retrocediendo un intercambio";
+        applyAlgorithmStep(previousSwap, function () {
+          if (!algorithmState) return;
+          algorithmState.locked = false;
+          resetAlgorithmCubeColors(algorithmState.parent);
+        });
+      }
+
+      function slowAlgorithm() {
+        if (!algorithmState) return;
+        algorithmState.speedIndex =
+          (algorithmState.speedIndex + 1) % algorithmSpeedOptions.length;
+        updateAlgorithmControlLabels();
+        document.getElementById("functionDomain").textContent =
+          "Velocidad: " + algorithmSpeedOptions[algorithmState.speedIndex].label;
+        if (
+          !algorithmState.paused &&
+          !algorithmState.locked &&
+          !algorithmState.finished
+        ) {
+          algorithmTimeouts.forEach(clearTimeout);
+          algorithmTimeouts = [];
+          scheduleNextAlgorithmStep(250);
+        }
       }
 
       // ===== EVENT LISTENERS =====
