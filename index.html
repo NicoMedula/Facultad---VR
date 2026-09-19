@@ -1,6 +1,35 @@
 <!doctype html>
 <html lang="es">
   <head>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1M4P3YW254"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1M4P3YW254');
+    </script>
+
+    <!-- Microsoft Clarity -->
+    <script type="text/javascript">
+      (function(c,l,a,r,i,t,y){
+          c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+          t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+          y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+      })(window, document, "clarity", "script", "ykqukwh9qj");
+    </script>
+
+    <!-- Envia un evento a GA4 y a Clarity con el mismo nombre -->
+    <script>
+      function track(nombre, params) {
+        params = params || {};
+        if (window.gtag) gtag("event", nombre, params);
+        if (window.clarity) clarity("event", nombre);
+      }
+    </script>
+
+    
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Facultad Virtual VR</title>
@@ -151,6 +180,11 @@
           ) {
             return;
           }
+
+          track("interaccion", {
+            accion: action,
+            aula: window.aulaActual || "pasillo",
+          });
 
           switch (action) {
             case "func1":
@@ -3280,6 +3314,84 @@
           this.el.removeEventListener("axismove", this.onAxisMove);
         },
       });
+
+      // ============================================
+      // COMPONENTE TRACK-RECORRIDO
+      // Detecta en que aula esta el jugador y reporta
+      // entrada/salida con permanencia a GA4 + Clarity.
+      // ============================================
+      AFRAME.registerComponent("track-recorrido", {
+        init: function () {
+          this.zonas = [];
+          this.actual = null;
+          this.desde = 0;
+          this.ultimoTick = 0;
+          var self = this;
+
+          // Las aulas ya vienen parseadas por el componente generar-aula
+          this.el.sceneEl.addEventListener("loaded", function () {
+            document.querySelectorAll("[generar-aula]").forEach(function (el) {
+              var cfg = el.components["generar-aula"].data;
+              self.zonas.push({
+                nombre: el.id,
+                tipo: cfg.tipo,
+                x: cfg.posicionXYZ.x,
+                z: cfg.posicionXYZ.z,
+              });
+            });
+          });
+
+          this.onUnload = function () {
+            self.salir();
+          };
+          window.addEventListener("pagehide", this.onUnload);
+        },
+
+        zonaEn: function (x, z) {
+          for (var i = 0; i < this.zonas.length; i++) {
+            var a = this.zonas[i];
+            if (
+              Math.abs(x - a.x) <= 4 &&
+              Math.abs(z - a.z) <= 3
+            ) {
+              return a;
+            }
+          }
+          return null;
+        },
+
+        salir: function () {
+          if (!this.actual) return;
+          track("salir_aula", {
+            aula: this.actual.nombre,
+            tipo: this.actual.tipo,
+            segundos: Math.round((Date.now() - this.desde) / 1000),
+          });
+          this.actual = null;
+          window.aulaActual = "pasillo";
+        },
+
+        tick: function (time) {
+          if (time - this.ultimoTick < 500) return;
+          this.ultimoTick = time;
+
+          var p = this.el.object3D.position;
+          var zona = this.zonaEn(p.x, p.z);
+          if (zona === this.actual) return;
+
+          this.salir();
+          if (zona) {
+            this.actual = zona;
+            this.desde = Date.now();
+            window.aulaActual = zona.nombre;
+            track("entrar_aula", { aula: zona.nombre, tipo: zona.tipo });
+          }
+        },
+
+        remove: function () {
+          window.removeEventListener("pagehide", this.onUnload);
+        },
+      });
     </script>
 
     <style>
@@ -3328,8 +3440,8 @@
         color: #ff6b9d;
       }
       .info-panel svg {
-        width: 16px;
-        height: 16px;
+        width: 10px;
+        height: 10px;
       }
       .info-panel h3 svg {
         width: 18px;
@@ -3922,6 +4034,7 @@
         id="rig"
         position="0 0 6"
         player-movement="speed: 4; radius: 0.4"
+        track-recorrido
       >
         <!-- Cámara: solo look-controls, wasd DESACTIVADO -->
         <a-camera
