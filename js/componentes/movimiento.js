@@ -17,6 +17,8 @@ AFRAME.registerComponent("player-movement", {
     this.forward = new THREE.Vector3();
     this.rightDir = new THREE.Vector3();
     this.tempBox = new THREE.Box3();
+    this.floorRects = [];
+    this.cam = this.el.querySelector("[camera]");
     this.ready = false;
 
     // Escuchar teclas
@@ -74,6 +76,12 @@ AFRAME.registerComponent("player-movement", {
       self.wallBoxes.push(box);
     });
 
+    // Límite del mapa: la unión de todos los pisos (pasillo + aulas).
+    this.floorRects = [];
+    document.querySelectorAll(".navegable").forEach(function (floor) {
+      self.floorRects.push(new THREE.Box3().setFromObject(floor.object3D));
+    });
+
     console.log("Colision lista:", this.wallBoxes.length, "paredes");
 
     // Debug: mostrar las cajas que bloquean la zona del pasillo
@@ -98,8 +106,13 @@ AFRAME.registerComponent("player-movement", {
   },
 
   // Verificar si posición (x, z) colisiona con alguna pared
+  // (x, z) es la posición del rig; se suma el desplazamiento de la cabeza
+  // porque en VR el usuario puede estar parado lejos del centro del rig.
   checkCollision: function (x, z) {
     var r = this.data.radius;
+    var head = this.cam.object3D.position;
+    x += head.x;
+    z += head.z;
     // Solo verificar colisión en la franja de altura del jugador (0.2 a 1.5m)
     this.tempBox.min.set(x - r, 0.2, z - r);
     this.tempBox.max.set(x + r, 1.5, z + r);
@@ -118,6 +131,8 @@ AFRAME.registerComponent("player-movement", {
 
     // GRAVEDAD: rig siempre a nivel del suelo
     pos.y = 0;
+
+    this.keepInside();
 
     // Solo procesar movimiento si hay teclas presionadas
     var anyKey =
@@ -186,6 +201,34 @@ AFRAME.registerComponent("player-movement", {
 
     if (!xBlocked) pos.x = newX;
     if (!zBlocked) pos.z = newZ;
+    this.keepInside();
+  },
+
+  // Si la cabeza queda fuera de todos los pisos (caminando en el
+  // espacio real, joystick, teletransporte...), se corre el rig
+  // hasta el punto más cercano dentro de la facultad.
+  keepInside: function () {
+    var pos = this.el.object3D.position;
+    var head = this.cam.object3D.position;
+    var hx = pos.x + head.x;
+    var hz = pos.z + head.z;
+    var margin = 0.2; // separación con el borde (paredes)
+    var clamp = THREE.MathUtils.clamp;
+    var bestX = hx, bestZ = hz, bestD = Infinity;
+    for (var i = 0; i < this.floorRects.length; i++) {
+      var r = this.floorRects[i];
+      var cx = clamp(hx, r.min.x + margin, r.max.x - margin);
+      var cz = clamp(hz, r.min.z + margin, r.max.z - margin);
+      var d = (cx - hx) * (cx - hx) + (cz - hz) * (cz - hz);
+      if (d === 0) return;
+      if (d < bestD) {
+        bestD = d;
+        bestX = cx;
+        bestZ = cz;
+      }
+    }
+    pos.x += bestX - hx;
+    pos.z += bestZ - hz;
   },
 
   remove: function () {
