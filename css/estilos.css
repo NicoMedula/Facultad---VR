@@ -71,12 +71,37 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 0 24px;
+  padding: 0 max(24px, env(safe-area-inset-right)) 0 max(24px, env(safe-area-inset-left));
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
 }
+/* En el celular los paneles tapaban la escena y los controles:
+   quedan ocultos y se abren con el botón "i". */
+body.touch:not(.ver-info) .info-panel {
+  display: none !important;
+}
+#info-toggle {
+  position: fixed;
+  top: 12px;
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 1000;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: rgba(20, 20, 40, 0.7);
+  color: #fff;
+  font: bold 20px/1 Georgia, serif;
+  -webkit-tap-highlight-color: transparent;
+}
+#info-toggle[hidden] {
+  display: none;
+}
 body.touch .info-panel {
+  top: 60px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   max-width: 42vw;
   padding: 10px 12px;
   font-size: 11px;
@@ -84,8 +109,14 @@ body.touch .info-panel {
 body.touch .info-panel h3 {
   font-size: 13px;
 }
+/* El botón de VR de A-Frame tapaba el botón ●: va arriba a la derecha. */
+body.touch .a-enter-vr {
+  top: 12px;
+  bottom: auto;
+  right: max(12px, env(safe-area-inset-right));
+}
 body.touch #mathHUD {
-  top: 20px !important;
+  top: 70px !important;
   right: 20px;
   bottom: auto !important;
   left: auto !important;

@@ -103,8 +103,17 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!IS_TOUCH_PHONE) return;
   var scene = document.querySelector("a-scene");
   var pad = document.getElementById("mobile-pad");
+  var infoToggle = document.getElementById("info-toggle");
   document.body.classList.add("touch");
   pad.hidden = false;
+  infoToggle.hidden = false;
+
+  infoToggle.addEventListener("click", function () {
+    var open = document.body.classList.toggle("ver-info");
+    infoToggle.textContent = open ? "×" : "i";
+    infoToggle.setAttribute("aria-expanded", open);
+    infoToggle.setAttribute("aria-label", open ? "Ocultar ayuda" : "Mostrar ayuda");
+  });
 
   pad.querySelectorAll("[data-key]").forEach(function (btn) {
     var key = btn.getAttribute("data-key");
@@ -129,10 +138,12 @@ document.addEventListener("DOMContentLoaded", function () {
   scene.addEventListener("enter-vr", function () {
     if (!scene.xrSession) return;
     pad.hidden = true;
+    infoToggle.hidden = true;
     appendEl(document.getElementById("rig"), "a-entity", { id: "vr-pad", "vr-move-pad": "" });
   });
   scene.addEventListener("exit-vr", function () {
     pad.hidden = false;
+    infoToggle.hidden = false;
     var vrPad = document.getElementById("vr-pad");
     if (vrPad) vrPad.parentNode.removeChild(vrPad);
   });
