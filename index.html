@@ -47,6 +47,49 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 
     <script>
+      // Fuente con tildes, ñ, ¿, ², λ... (la de A-Frame solo trae ASCII).
+      var textSchema = AFRAME.components.text.schema;
+      textSchema.font.default = "fonts/roboto-es.json";
+      textSchema.shader.default = "msdf";
+      textSchema.negate.default = false;
+
+      // Modo liviano para móviles y visores standalone (Quest, etc.):
+      // sin sombras ni luces puntuales. Forzar con ?lite=1 / ?lite=0.
+      var DEVICE = AFRAME.utils.device;
+      var IS_TOUCH_PHONE = DEVICE.isMobile() && !DEVICE.isMobileVR();
+      var LITE = /[?&]lite=1/.test(location.search) ||
+        (!/[?&]lite=0/.test(location.search) && (DEVICE.isMobile() || DEVICE.isMobileVR()));
+
+      // En VR inmersivo el navegador deja de llamar a window.requestAnimationFrame,
+      // así que las animaciones usan el bucle de la sesión XR cuando existe.
+      function nextFrame(cb) {
+        var scene = document.querySelector("a-scene");
+        var session = scene && scene.xrSession;
+        return session
+          ? { xr: session, id: session.requestAnimationFrame(function (t) { cb(t); }) }
+          : { id: requestAnimationFrame(cb) };
+      }
+      function cancelFrame(handle) {
+        if (!handle) return;
+        if (handle.xr) handle.xr.cancelAnimationFrame(handle.id);
+        else cancelAnimationFrame(handle.id);
+      }
+
+      // GSAP avanza con el tick de A-Frame (también funciona dentro de VR).
+      AFRAME.registerSystem("gsap-tick", {
+        init: function () {
+          this.time = window.gsap ? gsap.ticker.time : 0;
+          if (window.gsap) gsap.ticker.remove(gsap.updateRoot);
+        },
+        tick: function (time, delta) {
+          if (!window.gsap) return;
+          this.time += Math.min(delta || 0, 100) / 1000;
+          gsap.updateRoot(this.time);
+        },
+      });
+    </script>
+
+    <script>
       var LUCIDE_ICONS = {
         landmark: [
           ["line", { x1: "3", x2: "21", y1: "22", y2: "22" }],
@@ -428,7 +471,9 @@
         return button;
       }
 
-      function addBaseClassroom(parent, id, posicionXYZ, colorParedes) {
+      // parent = estructura (siempre visible); content = lo que se oculta
+      // cuando el jugador está lejos del aula (ver componente aula-culling).
+      function addBaseClassroom(parent, content, id, posicionXYZ, colorParedes) {
         var side = getAulaSide(posicionXYZ);
         var boardX = side * 4;
         var hallX = -side * 4;
@@ -523,7 +568,7 @@
           [-side * 1, 0, 0],
           [-side * 1, 0, 1.5],
         ].forEach(function (position) {
-          appendEl(parent, "a-entity", {
+          appendEl(content, "a-entity", {
             class: "pupitre",
             "gltf-model": "#modelo-pupitre",
             position: position.join(" "),
@@ -533,6 +578,7 @@
           });
         });
 
+        if (LITE) return; // en modo liviano no hay luces puntuales
         appendEl(parent, "a-light", {
           type: "point",
           color: "#FFFFFF",
@@ -553,10 +599,10 @@
 
       function getAulaDisplayName(id, tipo) {
         var names = {
-          matematica: "Analisis Matematico",
+          matematica: "Análisis Matemático",
           algoritmos: "Algoritmos",
-          cpu: "Planificacion de CPU",
-          fisica: "Fisica",
+          cpu: "Planificación de CPU",
+          fisica: "Física",
           probabilidad: "Probabilidad",
           complejidad: "Complejidad Computacional",
         };
@@ -608,14 +654,14 @@
           rotation: "0 90 0",
         });
         addText(menu, {
-          value: "Analisis Matematico I",
+          value: "Análisis Matemático I",
           position: "0 0.8 0",
           align: "center",
           color: "#4CAF50",
           width: "6",
         });
         addText(menu, {
-          value: "Selecciona una funcion:",
+          value: "Seleccioná una función:",
           position: "0 0.5 0",
           align: "center",
           color: "#fff",
@@ -711,7 +757,7 @@
           rotation: "0 90 0",
           action: "back-math",
           color: "#9B59B6",
-          label: "<- Menu Funciones",
+          label: "<- Menú Funciones",
           height: "0.25",
           depth: "0.06",
           textPosition: "0 0 0.04",
@@ -732,7 +778,7 @@
           width: "6",
         });
         addText(menu, {
-          value: "Selecciona un algoritmo:",
+          value: "Seleccioná un algoritmo:",
           position: "0 0.5 0",
           align: "center",
           color: "#fff",
@@ -790,7 +836,7 @@
           rotation: "0 -90 0",
           action: "back-algo",
           color: "#9B59B6",
-          label: "<- Menu Algoritmos",
+          label: "<- Menú Algoritmos",
           height: "0.25",
           depth: "0.06",
           textPosition: "0 0 0.04",
@@ -826,7 +872,7 @@
           rotation: "0 -90 0",
           action: "back-step-algo",
           color: "#607D8B",
-          label: "Atras",
+          label: "Atrás",
           width: "0.85",
           height: "0.24",
           depth: "0.06",
@@ -932,15 +978,16 @@
           width: "5.2",
         });
         addText(frontPanel, {
-          value: "Visualiza como diferentes algoritmos asignan la CPU a los procesos.",
+          value: "Visualizá cómo diferentes algoritmos asignan la CPU a los procesos.",
           position: "0 0.63 0.03",
           align: "center",
           color: "#E3F2FD",
           width: "4.8",
+          "wrap-count": "72",
         });
         addText(frontPanel, {
           value: "DIAGRAMA DE GANTT",
-          position: "0 0.34 0.03",
+          position: "0 0.45 0.03",
           align: "center",
           color: "#BBDEFB",
           width: "3.5",
@@ -966,11 +1013,12 @@
         });
         addText(frontPanel, {
           value:
-            "\u00bfQue es el Diagrama de Gantt?\nMuestra en una linea de tiempo que proceso se ejecuta en la CPU. Cada bloque representa un intervalo continuo de ejecucion.",
-          position: "0 -0.78 0.03",
+            "¿Qué es el diagrama de Gantt?\nMuestra en una línea de tiempo qué proceso se ejecuta en la CPU. Cada bloque representa un intervalo continuo de ejecución.",
+          position: "0 -0.8 0.03",
           align: "center",
           color: "#CFD8DC",
           width: "4.8",
+          "wrap-count": "64",
         });
 
         var leftPanel = addCpuPanel({
@@ -1185,7 +1233,7 @@
           width: "4",
         });
         addText(flow, {
-          value: "1. Llegada  ->  2. Listo  ->  3. Ejecucion  ->  4. E/S si aplica  ->  5. Termina",
+          value: "1. Llegada  ->  2. Listo  ->  3. Ejecución  ->  4. E/S si aplica  ->  5. Termina",
           position: "0 -0.07 0.03",
           align: "center",
           color: "#FFFFFF",
@@ -1194,7 +1242,7 @@
 
         addText(root, {
           id: "cpu-status-text",
-          value: "Elegi un algoritmo y pulsa Iniciar",
+          value: "Elegí un algoritmo y pulsá Iniciar",
           position: "0 2.92 -2.25",
           align: "center",
           color: "#E3F2FD",
@@ -1225,7 +1273,7 @@
           width: "6",
         });
         addText(menu, {
-          value: "Selecciona un tipo de movimiento:",
+          value: "Seleccioná un tipo de movimiento:",
           position: "0 0.5 0",
           align: "center",
           color: "#fff",
@@ -1274,7 +1322,7 @@
 
         addText(mruvDisplay, {
           id: "mruv-enunciado",
-          value: "Un auto esta detenido frente a un semaforo en rojo.\nCuando la luz cambia a verde, el conductor acelera\nen linea recta por la avenida. El auto parte del\nreposo con una aceleracion constante de 2,5 m/s²\ndurante un tiempo de 4 segundos. Calcula:",
+          value: "Un auto está detenido frente a un semáforo en rojo.\nCuando la luz cambia a verde, el conductor acelera\nen línea recta por la avenida. El auto parte del\nreposo con una aceleración constante de 2,5 m/s²\ndurante un tiempo de 4 segundos. Calculá:",
           position: "-1 -0.3 0",
           align: "left",
           color: "#fff",
@@ -1285,7 +1333,7 @@
 
         addText(mruvDisplay, {
           id: "mruv-pregunta",
-          value: "1. ¿Que velocidad alcanza?\n2. ¿Que distancia recorre?",
+          value: "1. ¿Qué velocidad alcanza?\n2. ¿Qué distancia recorre?",
           position: "-1 -1.05 0",
           align: "left",
           color: "#FFEB3B",
@@ -1299,7 +1347,7 @@
           position: "0 -1.4 0",
           action: "simulate-mruv",
           color: "#4CAF50",
-          label: "▶ SIMULAR",
+          label: "SIMULAR",
           textColor: "#fff",
           textWidth: "2.5",
           height: "0.3",
@@ -1470,7 +1518,7 @@
         });
 
         addText(mruDisplay, {
-          value: "Un auto circula a velocidad constante de\n20 m/s (72 km/h) por la autopista\nen linea recta. No acelera ni frena.\nCalcula:",
+          value: "Un auto circula a velocidad constante de\n20 m/s (72 km/h) por la autopista\nen línea recta. No acelera ni frena.\nCalculá:",
           position: "-1 -0.2 0",
           align: "left",
           color: "#fff",
@@ -1480,7 +1528,7 @@
         });
 
         addText(mruDisplay, {
-          value: "1. ¿Que distancia recorre en 4 segundos?\n2. ¿En cuanto tiempo recorre 60 m?",
+          value: "1. ¿Qué distancia recorre en 4 segundos?\n2. ¿En cuánto tiempo recorre 60 m?",
           position: "-1 -1.0 0",
           align: "left",
           color: "#FFEB3B",
@@ -1494,7 +1542,7 @@
           position: "0 -1.4 0",
           action: "simulate-mru",
           color: "#2196F3",
-          label: "▶ SIMULAR",
+          label: "SIMULAR",
           textColor: "#fff",
           textWidth: "2.5",
           height: "0.3",
@@ -1608,7 +1656,7 @@
         });
 
         addText(mruResultsDisplay, {
-          value: "Resultados de la Simulacion",
+          value: "Resultados de la Simulación",
           position: side * 3.8 + " 3 0",
           rotation: "0 " + -side * 90 + " 0",
           align: "center",
@@ -1683,7 +1731,8 @@
         }
 
         function expandProbabilityClassroom() {
-          var floor = parent.querySelector("#" + id + "-suelo");
+          var aulaEl = parent.closest("[data-aula-tipo]") || parent;
+          var floor = aulaEl.querySelector("#" + id + "-suelo");
           if (floor) {
             floor.setAttribute("width", "9.6");
             floor.setAttribute("height", "10.8");
@@ -1691,7 +1740,7 @@
             floor.setAttribute("material", "src: #textura-suelo; repeat: 4.8 5.4; roughness: 0.7");
           }
 
-          parent.querySelectorAll(".collidable").forEach(function (wall) {
+          aulaEl.querySelectorAll(".collidable").forEach(function (wall) {
             var width = parseFloat(wall.getAttribute("width") || 0);
             var depth = parseFloat(wall.getAttribute("depth") || 0);
             var pos = wall.getAttribute("position");
@@ -1716,7 +1765,7 @@
             }
           });
 
-          parent.querySelectorAll("a-plane").forEach(function (plane) {
+          aulaEl.querySelectorAll(":scope > a-plane").forEach(function (plane) {
             var pos = plane.getAttribute("position");
             var p = typeof pos === "string" ? pos.split(" ").map(parseFloat) : pos ? [pos.x, pos.y, pos.z] : [0, 0, 0];
             if (Math.abs(p[1] - 3.5) < 0.05) {
@@ -1726,7 +1775,7 @@
             }
           });
 
-          var blackboard = parent.querySelector("[gltf-model='#modelo-pizarra']");
+          var blackboard = aulaEl.querySelector("[gltf-model='#modelo-pizarra']");
           if (blackboard) blackboard.setAttribute("position", side * 3.5 + " 1.3 0");
         }
 
@@ -1869,7 +1918,7 @@
         });
         addText(centerTable, {
           id: "prob-title",
-          value: "Distribucion observada",
+          value: "Distribución observada",
           position: "0 2.5 -0.48",
           rotation: "0 0 0",
           align: "center",
@@ -2006,7 +2055,7 @@
           color: "#FDE047",
         });
         addText(board, {
-          value: "Teoria esperada",
+          value: "Teoría esperada",
           position: "-0.78 -0.36 0.045",
           align: "left",
           color: "#F8FAFC",
@@ -2748,7 +2797,7 @@
           material: "side: double; transparent: true",
         });
         addText(paramPanel, {
-          value: "Parametros del modelo",
+          value: "Parámetros del modelo",
           position: "0 0.85 0.04",
           align: "center",
           color: "#E5F2FF",
@@ -2756,7 +2805,7 @@
           scale: "0.9 0.9 0.9",
         });
         addText(paramPanel, {
-          value: "Ajusta los parametros matematicos que definen la distribucion teorica",
+          value: "Ajustá los parámetros matemáticos que definen la distribución teórica",
           position: "0 0.61 0.04",
           align: "center",
           color: "#93C5FD",
@@ -2874,7 +2923,7 @@
           align: "center",
           color: "#FFFFFF",
           width: "5.4",
-          wrapCount: "78",
+          "wrap-count": "56",
           scale: "0.68 0.68 0.68",
         });
 
@@ -2887,7 +2936,7 @@
           accent: "#FB923C",
         });
         addText(controls, {
-          value: "ANALIZA TU CODIGO",
+          value: "ANALIZÁ TU CÓDIGO",
           position: "0 1.5 0.03",
           align: "center",
           color: "#FFFFFF",
@@ -2910,7 +2959,7 @@
         });
 
         addText(advanced, {
-          value: "Selecciona una Complejidad:",
+          value: "Seleccioná una complejidad:",
           position: "0 1.06 0.03",
           align: "center",
           color: "#FDBA74",
@@ -2923,7 +2972,7 @@
           ["lineal", "Lineal O(n)", "0.40", "#1D4ED8"],
           ["binaria", "Binaria O(log n)", "0.10", "#1D4ED8"],
           ["ordena", "Ordena O(n log n)", "-0.20", "#1D4ED8"],
-          ["doble", "Cuadratica O(n^2)", "-0.50", "#1D4ED8"],
+          ["doble", "Cuadrática O(n^2)", "-0.50", "#1D4ED8"],
           ["fibo", "Exponencial O(2^n)", "-0.80", "#1D4ED8"],
         ].forEach(function (btn) {
           addButton(advanced, {
@@ -2940,7 +2989,7 @@
         });
 
         addText(advanced, {
-          value: "Toca cualquier caso para cargar graficas y metricas",
+          value: "Tocá cualquier caso para cargar gráficas y métricas",
           position: "0 -1.15 0.03",
           align: "center",
           color: "#A8A29E",
@@ -2958,7 +3007,7 @@
           accent: "#A3E635",
         });
         addText(metrics, {
-          value: "METRICAS AST",
+          value: "MÉTRICAS AST",
           position: "0 1.06 0.03",
           align: "center",
           color: "#FFFFFF",
@@ -3003,15 +3052,16 @@
         aula.setAttribute("position", vectorToString(posicionXYZ));
         aula.setAttribute("data-aula-tipo", tipo);
 
-        addBaseClassroom(aula, id, posicionXYZ, colorParedes);
+        var content = appendEl(aula, "a-entity", { class: "aula-contenido" });
+        addBaseClassroom(aula, content, id, posicionXYZ, colorParedes);
         addAulaSign(aula, id, tipo, posicionXYZ);
 
         if (tipo === "matematica") {
-          buildMathContent(aula);
+          buildMathContent(content);
         } else if (tipo === "algoritmos") {
-          buildAlgorithmContent(aula);
+          buildAlgorithmContent(content);
         } else if (tipo === "cpu" || tipo === "fisica" || tipo === "probabilidad" || tipo === "complejidad") {
-          buildPlaceholderContent(aula, id, tipo, posicionXYZ);
+          buildPlaceholderContent(content, id, tipo, posicionXYZ);
         }
 
         if (!targetEl && scene) scene.appendChild(aula);
@@ -3392,6 +3442,59 @@
           window.removeEventListener("pagehide", this.onUnload);
         },
       });
+
+      // ============================================
+      // COMPONENTE AULA-CULLING
+      // Las paredes no tapan lo que está detrás, así que el visor
+      // dibujaba todas las aulas a la vez. Solo se muestra el contenido
+      // (paneles, botones, pupitres) de las aulas que se pueden ver.
+      // ============================================
+      AFRAME.registerComponent("aula-culling", {
+        init: function () {
+          this.aulas = [];
+          this.last = 0;
+          var self = this;
+          this.el.sceneEl.addEventListener("loaded", function () {
+            document.querySelectorAll("[generar-aula]").forEach(function (el) {
+              var p = el.components["generar-aula"].data.posicionXYZ;
+              var floor = document.getElementById(el.id + "-suelo");
+              var fp = floor.getAttribute("position");
+              self.aulas.push({
+                content: el.querySelector(".aula-contenido").object3D,
+                z: p.z,
+                cx: p.x + fp.x,
+                cz: p.z + fp.z,
+                hw: parseFloat(floor.getAttribute("width")) / 2,
+                hd: parseFloat(floor.getAttribute("height")) / 2,
+              });
+            });
+            self.refresh();
+          });
+        },
+
+        refresh: function () {
+          var pos = this.el.object3D.position;
+          var inside = null;
+          if (Math.abs(pos.x) > 2.05) {
+            inside = this.aulas.find(function (a) {
+              return Math.abs(pos.x - a.cx) <= a.hw && Math.abs(pos.z - a.cz) <= a.hd;
+            });
+          }
+          this.aulas.forEach(function (a) {
+            // Desde un aula se ve la de enfrente (puertas alineadas);
+            // desde el pasillo, las aulas cercanas.
+            a.content.visible = inside
+              ? Math.abs(a.z - inside.z) < 1
+              : Math.abs(pos.z - a.z) < 6;
+          });
+        },
+
+        tick: function (time) {
+          if (time - this.last < 200) return;
+          this.last = time;
+          this.refresh();
+        },
+      });
     </script>
 
     <style>
@@ -3461,27 +3564,99 @@
         font-size: 12px;
         color: #7a8adb;
       }
+      #mobile-pad {
+        position: fixed;
+        inset: auto 0 24px 0;
+        z-index: 999;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding: 0 24px;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      body.touch .info-panel {
+        max-width: 42vw;
+        padding: 10px 12px;
+        font-size: 11px;
+      }
+      body.touch .info-panel h3 {
+        font-size: 13px;
+      }
+      body.touch #mathHUD {
+        top: 20px !important;
+        right: 20px;
+        bottom: auto !important;
+        left: auto !important;
+      }
+      #mobile-pad[hidden] {
+        display: none;
+      }
+      #mobile-pad button {
+        pointer-events: auto;
+        touch-action: none;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.6);
+        background: rgba(20, 20, 40, 0.55);
+        color: #fff;
+        font-size: 24px;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #mobile-pad button.activo {
+        background: rgba(76, 175, 80, 0.8);
+      }
+      #mobile-pad .pad-dir {
+        display: grid;
+        grid-template-columns: repeat(3, 64px);
+        grid-template-rows: repeat(3, 64px);
+        gap: 4px;
+      }
+      #mobile-pad .pad-up { grid-area: 1 / 2; }
+      #mobile-pad .pad-left { grid-area: 2 / 1; }
+      #mobile-pad .pad-right { grid-area: 2 / 3; }
+      #mobile-pad .pad-down { grid-area: 3 / 2; }
+      #mobile-pad #pad-use {
+        width: 84px;
+        height: 84px;
+        font-size: 30px;
+        background: rgba(76, 175, 80, 0.55);
+      }
     </style>
   </head>
   <body>
     <!-- Panel de información -->
     <div class="info-panel">
       <h3 class="panel-title"><span data-lucide-icon="landmark"></span>Facultad Virtual VR</h3>
-      <p><strong>PC:</strong> WASD para moverse, Mouse para mirar</p>
-      <p><strong>VR:</strong> Gatillo para teletransportarte</p>
+      <p><strong>PC:</strong> WASD para moverse, mouse para mirar</p>
+      <p><strong>VR:</strong> joystick para caminar, grip para teletransportarte y gatillo para usar los botones</p>
+      <p><strong>Móvil:</strong> flechas para moverse; apuntá el círculo a un botón y tocá ● para usarlo</p>
       <div class="location">
         <p class="icon-row"><span data-lucide-icon="map-pin"></span>Pasillo Principal</p>
         <p class="icon-row"><span data-lucide-icon="door-open"></span>Impar izquierda | Par derecha</p>
-        <p class="icon-row"><span data-lucide-icon="door-open"></span>1 Analisis Matematico | 2 Programación</p>
-        <p class="icon-row"><span data-lucide-icon="door-open"></span>3 CPU | 4 Fisica</p>
+        <p class="icon-row"><span data-lucide-icon="door-open"></span>1 Análisis Matemático | 2 Algoritmos</p>
+        <p class="icon-row"><span data-lucide-icon="door-open"></span>3 CPU | 4 Física</p>
         <p class="icon-row"><span data-lucide-icon="door-open"></span>5 Probabilidad | 6 Complejidad</p>
       </div>
+    </div>
+
+    <!-- Controles táctiles (móvil fuera de VR) -->
+    <div id="mobile-pad" hidden>
+      <div class="pad-dir">
+        <button data-key="ArrowUp" class="pad-up" aria-label="Adelante">▲</button>
+        <button data-key="ArrowLeft" class="pad-left" aria-label="Izquierda">◀</button>
+        <button data-key="ArrowRight" class="pad-right" aria-label="Derecha">▶</button>
+        <button data-key="ArrowDown" class="pad-down" aria-label="Atrás">▼</button>
+      </div>
+      <button id="pad-use" aria-label="Usar el botón al que apunta el círculo">●</button>
     </div>
 
     <a-scene
       vr-mode-ui="enabled: true"
       webxr="referenceSpaceType: local-floor; optionalFeatures: bounded-floor, hand-tracking"
-      renderer="antialias: true; colorManagement: true; sortTransparentObjects: true; physicallyCorrectLights: true"
+      renderer="antialias: true; colorManagement: true; sortTransparentObjects: true; physicallyCorrectLights: true; highRefreshRate: false"
       shadow="type: pcfsoft"
     >
       <!-- ========================================== -->
@@ -3502,8 +3677,7 @@
           id="modelo-pupitre"
           src="silla_pupitre_disgraf_8b.glb"
         ></a-asset-item>
-        <a-asset-item id="modelo-logo" src="Iso.gltf"></a-asset-item>
-        <img id="textura-logo" src="logo.png" crossorigin="anonymous" />
+        <a-asset-item id="modelo-logo" src="Iso.glb"></a-asset-item>
       </a-assets>
 
       <!-- ========================================== -->
@@ -4035,6 +4209,7 @@
         position="0 0 6"
         player-movement="speed: 4; radius: 0.4"
         track-recorrido
+        aula-culling
       >
         <!-- Cámara: solo look-controls, wasd DESACTIVADO -->
         <a-camera
@@ -4116,6 +4291,148 @@
 
     <script>
       // ============================================
+      // MODO LIVIANO (móvil / visor standalone)
+      // Corre antes de que A-Frame inicialice la escena.
+      // ============================================
+      if (LITE) {
+        document.querySelector("a-scene").setAttribute("shadow", "enabled: false");
+        document.querySelectorAll("#pasillo a-light[type=point]").forEach(function (l) {
+          l.parentNode.removeChild(l);
+        });
+        // Compensa la luz de las lámparas que se quitaron.
+        document.querySelector("a-light[type=ambient]").setAttribute("intensity", "0.55");
+      }
+
+      // ============================================
+      // CONTROLES MÓVILES
+      // Fuera de VR: flechas en pantalla + botón ● para usar
+      // lo que apunta el círculo. En VR (Cardboard): flechas 3D
+      // a los pies; mirarlas hace caminar, tocar la pantalla usa botones.
+      // ============================================
+      function setMoveKey(key, on) {
+        var pm = document.getElementById("rig").components["player-movement"];
+        if (pm) pm.keys[key] = on;
+      }
+
+      function clickGazeTarget() {
+        var cursorEl = document.querySelector("a-cursor");
+        var cursor = cursorEl && cursorEl.components.cursor;
+        if (cursor && cursor.intersectedEl) {
+          cursor.intersectedEl.emit("click", { cursorEl: cursorEl, intersection: cursor.intersection });
+        }
+      }
+
+      var VR_PAD_ARROWS = [
+        ["ArrowUp", "0 0.3 0", 0],
+        ["ArrowDown", "0 -0.3 0", 180],
+        ["ArrowLeft", "-0.3 0 0", 90],
+        ["ArrowRight", "0.3 0 0", -90],
+      ];
+
+      AFRAME.registerComponent("vr-move-pad", {
+        init: function () {
+          var self = this;
+          this.camera = document.getElementById("camera").object3D;
+          this.hovered = null;
+          this.yaw = null;
+          this.dir = new THREE.Vector3();
+
+          var panel = appendEl(this.el, "a-entity", { position: "0 0 -0.8", rotation: "-50 0 0" });
+          VR_PAD_ARROWS.forEach(function (cfg) {
+            var arrow = appendEl(panel, "a-entity", { class: "clickable", position: cfg[1] });
+            var bg = appendEl(arrow, "a-circle", { radius: "0.13", color: "#1E293B", opacity: "0.75", material: "shader: flat" });
+            appendEl(arrow, "a-triangle", {
+              position: "0 0 0.005",
+              rotation: "0 0 " + cfg[2],
+              scale: "0.14 0.14 0.14",
+              color: "#FFFFFF",
+              material: "shader: flat",
+            });
+            arrow.addEventListener("mouseenter", function () {
+              self.hovered = cfg[0];
+              setMoveKey(cfg[0], true);
+              bg.setAttribute("color", "#4CAF50");
+            });
+            arrow.addEventListener("mouseleave", function () {
+              if (self.hovered === cfg[0]) self.hovered = null;
+              setMoveKey(cfg[0], false);
+              bg.setAttribute("color", "#1E293B");
+            });
+          });
+          appendEl(panel, "a-text", {
+            value: "Mirá una flecha para caminar\nTocá la pantalla para usar un botón",
+            position: "0 -0.55 0",
+            align: "center",
+            width: "1.2",
+            color: "#FFFFFF",
+          });
+        },
+
+        tick: function () {
+          // El panel sigue la posición de la cabeza y gira con ella
+          // solo cuando no se está mirando una flecha.
+          var cam = this.camera;
+          this.el.object3D.position.set(cam.position.x, cam.position.y - 1.0, cam.position.z);
+          if (this.hovered) return;
+          cam.getWorldDirection(this.dir);
+          // dir es el eje +Z de la cabeza (mira hacia -Z).
+          var yaw = Math.atan2(this.dir.x, this.dir.z);
+          var diff = this.yaw === null ? Infinity : Math.abs(Math.atan2(Math.sin(yaw - this.yaw), Math.cos(yaw - this.yaw)));
+          if (diff > 0.6) {
+            this.yaw = yaw;
+            this.el.object3D.rotation.y = yaw;
+          }
+        },
+
+        remove: function () {
+          VR_PAD_ARROWS.forEach(function (cfg) {
+            setMoveKey(cfg[0], false);
+          });
+        },
+      });
+
+      document.addEventListener("DOMContentLoaded", function () {
+        if (!IS_TOUCH_PHONE) return;
+        var scene = document.querySelector("a-scene");
+        var pad = document.getElementById("mobile-pad");
+        document.body.classList.add("touch");
+        pad.hidden = false;
+
+        pad.querySelectorAll("[data-key]").forEach(function (btn) {
+          var key = btn.getAttribute("data-key");
+          function set(on) {
+            setMoveKey(key, on);
+            btn.classList.toggle("activo", on);
+          }
+          btn.addEventListener("pointerdown", function (e) {
+            e.preventDefault();
+            btn.setPointerCapture(e.pointerId);
+            set(true);
+          });
+          ["pointerup", "pointercancel", "lostpointercapture"].forEach(function (type) {
+            btn.addEventListener(type, function () {
+              set(false);
+            });
+          });
+        });
+        document.getElementById("pad-use").addEventListener("click", clickGazeTarget);
+
+        // En VR inmersivo la pantalla no muestra el HTML: se usan las flechas 3D.
+        scene.addEventListener("enter-vr", function () {
+          if (!scene.xrSession) return;
+          pad.hidden = true;
+          appendEl(document.getElementById("rig"), "a-entity", { id: "vr-pad", "vr-move-pad": "" });
+        });
+        scene.addEventListener("exit-vr", function () {
+          pad.hidden = false;
+          var vrPad = document.getElementById("vr-pad");
+          if (vrPad) vrPad.parentNode.removeChild(vrPad);
+        });
+      });
+    </script>
+
+    <script>
+      // ============================================
       // SISTEMA INTERACTIVO DE LA FACULTAD VR
       // AM1 (Aula 1) + Algoritmos (Aula 2)
       // ============================================
@@ -4138,8 +4455,8 @@
       var mathFunctions = {
         func1: {
           name: "f(x,y) = sin(x) * cos(y)",
-          description: "Funcion trigonometrica que crea ondas entrecruzadas",
-          domain: "Dominio: x e [-pi, pi], y e [-pi, pi]",
+          description: "Función trigonométrica que crea ondas entrecruzadas",
+          domain: "Dominio: x ∈ [-π, π], y ∈ [-π, π]",
           formula: function (x, z) {
             return Math.sin(x) * Math.cos(z);
           },
@@ -4147,31 +4464,31 @@
         func2: {
           name: "f(x,y) = x² + y²",
           description: "Paraboloide circular - forma de cuenco",
-          domain: "Dominio: x e [-2, 2], y e [-2, 2]",
+          domain: "Dominio: x ∈ [-2, 2], y ∈ [-2, 2]",
           formula: function (x, z) {
             return (x * x + z * z) * 0.3;
           },
         },
         func3: {
           name: "f(x,y) = sin(sqrt(x²+y²))",
-          description: "Ondas circulares concentricas",
-          domain: "Dominio: x e [-3pi, 3pi], y e [-3pi, 3pi]",
+          description: "Ondas circulares concéntricas",
+          domain: "Dominio: x ∈ [-3π, 3π], y ∈ [-3π, 3π]",
           formula: function (x, z) {
             return Math.sin(Math.sqrt(x * x + z * z));
           },
         },
         func4: {
           name: "f(x,y) = cos(x) * sin(y)",
-          description: "Ondas trigonometricas perpendiculares",
-          domain: "Dominio: x e [-pi, pi], y e [-pi, pi]",
+          description: "Ondas trigonométricas perpendiculares",
+          domain: "Dominio: x ∈ [-π, π], y ∈ [-π, π]",
           formula: function (x, z) {
             return Math.cos(x) * Math.sin(z);
           },
         },
         func5: {
           name: "f(x,y) = e^(-(x²+y²))",
-          description: "Distribucion gaussiana - campana 3D",
-          domain: "Dominio: x e [-2, 2], y e [-2, 2]",
+          description: "Distribución gaussiana - campana 3D",
+          domain: "Dominio: x ∈ [-2, 2], y ∈ [-2, 2]",
           formula: function (x, z) {
             return Math.exp(-(x * x + z * z));
           },
@@ -4399,17 +4716,17 @@
         document.getElementById("functionTitle").textContent = title;
         var descs = {
           bubble:
-            "Compara elementos adyacentes e intercambia si estan en orden incorrecto.",
-          insertion: "Toma elementos e inserta en la posicion correcta.",
+            "Compara elementos adyacentes e intercambia si están en orden incorrecto.",
+          insertion: "Toma elementos e inserta en la posición correcta.",
           quick: "Selecciona un pivote y reorganiza los elementos.",
           baraja: "Ordena como una baraja: toma cada elemento y lo inserta donde corresponde.",
           intercambio:
-            "Compara pares vecinos e intercambia directamente cuando estan invertidos.",
+            "Compara pares vecinos e intercambia directamente cuando están invertidos.",
         };
         document.getElementById("functionDescription").textContent =
           descs[algoKey] || "";
         document.getElementById("functionDomain").textContent =
-          "Observa las comparaciones y movimientos";
+          "Observá las comparaciones y los movimientos";
 
         var arr = generateRandomArray();
         generateAlgorithmBars(arr);
@@ -4703,7 +5020,7 @@
         isSorting = false;
         updateAlgorithmControlLabels();
         document.getElementById("functionDomain").textContent =
-          "Ordenamiento completado!";
+          "¡Ordenamiento completado!";
       }
 
       function toggleAlgorithmPause() {
@@ -4715,11 +5032,11 @@
             algorithmTimeouts = [];
           }
           document.getElementById("functionDomain").textContent =
-            "Animacion pausada";
+            "Animación pausada";
         } else {
           isSorting = true;
           document.getElementById("functionDomain").textContent =
-            "Animacion reanudada";
+            "Animación reanudada";
           scheduleNextAlgorithmStep(250);
         }
         updateAlgorithmControlLabels();
@@ -4747,7 +5064,7 @@
         if (!previousSwap) {
           resetAlgorithmCubeColors(algorithmState.parent);
           document.getElementById("functionDomain").textContent =
-            "Ya estas al inicio del ordenamiento";
+            "Ya estás al inicio del ordenamiento";
           return;
         }
 
@@ -4983,13 +5300,13 @@
           "\nTiempo de retorno prom. (TAT): " + avg("turnaroundTime") +
           "\nTiempo de respuesta prom.: " + avg("responseTime") +
           "\nProcesos por segundo: " + throughput +
-          "\nUtilizacion de CPU: " + utilization + "%";
+          "\nUtilización de CPU: " + utilization + "%";
         var metrics = document.getElementById("cpu-metrics-text");
         if (metrics) metrics.setAttribute("value", text);
         var status = document.getElementById("cpu-status-text");
         if (status) {
           var current = s.current ? "Ejecutando " + s.current.id : "CPU libre";
-          if (s.finished) current = "Simulacion finalizada";
+          if (s.finished) current = "Simulación finalizada";
           status.setAttribute("value", current);
         }
         var cpuCurrent = document.getElementById("cpu-current-label");
@@ -5013,7 +5330,7 @@
 
       function buildCpuProcessTableText() {
         var s = ensureCpuState();
-        var lines = ["Proceso | Llegada | Rafaga | E/S ini | E/S dur | Estado"];
+        var lines = ["Proceso | Llegada | Ráfaga | E/S ini | E/S dur | Estado"];
         s.processes.forEach(function (p) {
           lines.push(
             p.id +
@@ -5356,22 +5673,22 @@
         "O(1)": "Excelente: tiempo constante.",
         "O(log n)": "Excelente: crecimiento muy lento.",
         "O(n)": "Buena: crecimiento lineal.",
-        "O(n log n)": "Buena: tipica de ordenamientos eficientes.",
-        "O(n^2)": "Aceptable solo para entradas pequenas o medianas.",
+        "O(n log n)": "Buena: típica de ordenamientos eficientes.",
+        "O(n^2)": "Aceptable solo para entradas pequeñas o medianas.",
         "O(n^3)": "Costosa para entradas medianas o grandes.",
-        "O(2^n)": "Muy costosa: viable solo con n pequeno.",
+        "O(2^n)": "Muy costosa: viable solo con n pequeño.",
         "O(n!)": "Extrema: evitar para entradas grandes.",
       };
 
       var COMPLEXITY_FEEDBACK = {
-        "O(1)": { ok: true, msg: "Tiempo constante: el costo no depende del tamano de la entrada. Es el mejor caso posible." },
-        "O(log n)": { ok: true, msg: "Crecimiento logaritmico: aunque la entrada crezca mucho, el costo sube muy poco. Patron de busqueda binaria." },
-        "O(n)": { ok: true, msg: "Crecimiento lineal: el costo acompana al tamano de la entrada de forma proporcional. Eficiente y escalable." },
-        "O(n log n)": { ok: true, msg: "Tipico de ordenamientos eficientes. Escala muy bien incluso con entradas grandes." },
+        "O(1)": { ok: true, msg: "Tiempo constante: el costo no depende del tamaño de la entrada. Es el mejor caso posible." },
+        "O(log n)": { ok: true, msg: "Crecimiento logarítmico: aunque la entrada crezca mucho, el costo sube muy poco. Patrón de búsqueda binaria." },
+        "O(n)": { ok: true, msg: "Crecimiento lineal: el costo acompaña al tamaño de la entrada de forma proporcional. Eficiente y escalable." },
+        "O(n log n)": { ok: true, msg: "Típico de ordenamientos eficientes. Escala muy bien incluso con entradas grandes." },
         "O(n^2)": { ok: false, msg: "Bucles anidados: el costo crece al cuadrado. Sirve para entradas chicas. Tip: un set o diccionario auxiliar suele bajarlo a O(n)." },
-        "O(n^3)": { ok: false, msg: "Tres bucles anidados: crecimiento cubico. Para datos medianos o grandes revisa algoritmos optimizados o librerias numericas." },
-        "O(2^n)": { ok: false, msg: "Recursividad multiple: el trabajo se duplica en cada paso. Solo viable con n chico. Tip: memoizacion o programacion dinamica." },
-        "O(n!)": { ok: false, msg: "Crecimiento factorial: evitar para entradas grandes. Busca podas o heuristicas." },
+        "O(n^3)": { ok: false, msg: "Tres bucles anidados: crecimiento cúbico. Para datos medianos o grandes, revisá algoritmos optimizados o librerías numéricas." },
+        "O(2^n)": { ok: false, msg: "Recursividad múltiple: el trabajo se duplica en cada paso. Solo viable con n chico. Tip: memoización o programación dinámica." },
+        "O(n!)": { ok: false, msg: "Crecimiento factorial: evitar para entradas grandes. Buscá podas o heurísticas." },
       };
 
       var COMPLEXITY_RANK = {
@@ -5397,7 +5714,7 @@
             depth: 1,
           },
           explain: "Acceso directo a un elemento. No depende de n.",
-          recommend: "Ideal cuando solo necesitas el primer elemento o un indice fijo.",
+          recommend: "Ideal cuando solo necesitás el primer elemento o un índice fijo.",
         },
         {
           id: "lineal",
@@ -5419,7 +5736,7 @@
             depth: 2,
           },
           explain: "Recorre la lista completa en el peor caso.",
-          recommend: "Si la lista esta ordenada, usa busqueda binaria para bajar a O(log n).",
+          recommend: "Si la lista está ordenada, usá búsqueda binaria para bajar a O(log n).",
         },
         {
           id: "binaria",
@@ -5447,7 +5764,7 @@
             depth: 3,
           },
           explain: "Parte el problema a la mitad en cada paso.",
-          recommend: "Requiere datos ordenados; si no, ordena primero.",
+          recommend: "Requiere datos ordenados; si no, ordená primero.",
         },
         {
           id: "ordena",
@@ -5466,7 +5783,7 @@
             depth: 1,
           },
           explain: "Usa un algoritmo de ordenamiento eficiente (n log n).",
-          recommend: "Si no necesitas orden total, usa seleccion parcial (n).",
+          recommend: "Si no necesitás un orden total, usá selección parcial (n).",
         },
         {
           id: "doble",
@@ -5487,7 +5804,7 @@
             depth: 3,
           },
           explain: "Dos bucles anidados: n * n operaciones.",
-          recommend: "Busca reducir una dimension o usar estructuras precomputadas.",
+          recommend: "Buscá reducir una dimensión o usar estructuras precomputadas.",
         },
         {
           id: "fibo",
@@ -5501,16 +5818,24 @@
           metrics: {
             functions: 1,
             loops: 0,
-            recursion: "multiple",
+            recursion: "múltiple",
             conditionals: 1,
             calls: 2,
             assigns: 0,
             depth: 2,
           },
           explain: "Cada llamada se divide en dos ramas recursivas.",
-          recommend: "Usa memoizacion o version iterativa para bajar a O(n).",
+          recommend: "Usá memoización o una versión iterativa para bajar a O(n).",
         },
       ];
+
+      // El texto 3D descarta cualquier espacio al inicio de línea:
+      // se usa U+2800 (blanco en la fuente) para conservar la sangría de Python.
+      function indentCode(code) {
+        return code.replace(/^ +/gm, function (spaces) {
+          return spaces.replace(/ /g, "\u2800");
+        });
+      }
 
       function formatAstMetrics(sample) {
         if (!sample || !sample.metrics) return "";
@@ -5553,15 +5878,15 @@
       function deriveReason(state, bigO) {
         var traits =
           "Bucles anidados sobre n: " + state.loops + "\n" +
-          "Recursividad: " + state.recursion + "\n" +
-          "Ordena (sort): " + (state.sort ? "si" : "no") + "\n" +
-          "Divide a la mitad: " + (state.halving ? "si" : "no");
+          "Recursividad: " + (state.recursion === "multiple" ? "múltiple" : state.recursion) + "\n" +
+          "Ordena (sort): " + (state.sort ? "sí" : "no") + "\n" +
+          "Divide a la mitad: " + (state.halving ? "sí" : "no");
         var why;
-        if (state.recursion === "multiple") why = "La recursividad multiple domina el costo.";
+        if (state.recursion === "multiple") why = "La recursividad múltiple domina el costo.";
         else if (state.loops >= 2) why = state.loops + " bucles anidados elevan n a la potencia " + state.loops + ".";
-        else if (state.sort && COMPLEXITY_RANK[bigO] === COMPLEXITY_RANK["O(n log n)"]) why = "La operacion de ordenamiento domina con crecimiento n log n.";
-        else if (state.loops === 1) why = "Un unico recorrido de la entrada da crecimiento lineal.";
-        else if (state.halving) why = "Descartar la mitad en cada paso da crecimiento logaritmico.";
+        else if (state.sort && COMPLEXITY_RANK[bigO] === COMPLEXITY_RANK["O(n log n)"]) why = "La operación de ordenamiento domina con crecimiento n log n.";
+        else if (state.loops === 1) why = "Un único recorrido de la entrada da crecimiento lineal.";
+        else if (state.halving) why = "Descartar la mitad en cada paso da crecimiento logarítmico.";
         else why = "No hay bucles ni recursividad que dependan de n.";
         return { traits: traits, why: why };
       }
@@ -5809,17 +6134,17 @@
         var preview = s.result || deriveBigO(s);
         var info = deriveReason(s, preview);
         if (selectedSample) {
-          if (codeTitle) codeTitle.setAttribute("value", "CODIGO: " + selectedSample.name);
-          if (code) code.setAttribute("value", selectedSample.code);
+          if (codeTitle) codeTitle.setAttribute("value", "CÓDIGO: " + selectedSample.name);
+          if (code) code.setAttribute("value", indentCode(selectedSample.code));
         } else {
-          if (codeTitle) codeTitle.setAttribute("value", "TU SELECCION");
+          if (codeTitle) codeTitle.setAttribute("value", "TU SELECCIÓN");
           if (code) code.setAttribute("value", info.traits);
         }
 
         if (!s.calculated) {
-          if (caseName) caseName.setAttribute("value", "Esperando seleccion");
-          if (result) result.setAttribute("value", "Selecciona una complejidad en el panel izquierdo");
-          if (metrics) metrics.setAttribute("value", "Metricas de ejecucion de codigo.");
+          if (caseName) caseName.setAttribute("value", "Esperando selección");
+          if (result) result.setAttribute("value", "Seleccioná una complejidad en el panel izquierdo");
+          if (metrics) metrics.setAttribute("value", "Métricas de ejecución de código.");
           if (recommendation) recommendation.setAttribute("value", "");
           clearEntityChildren(chart);
           return;
@@ -5832,7 +6157,7 @@
         if (result) {
           result.setAttribute(
             "value",
-            "Funcion del comportamiento: " + bigO +
+            "Función del comportamiento: " + bigO +
               " | ops aprox. (n=" + s.n + "): " + formatComplexityOps(ops) +
               "\n" + (COMPLEXITY_QUALITATIVE[bigO] || ""),
           );
@@ -5840,20 +6165,20 @@
 
         if (selectedSample) {
           if (codeTitle) codeTitle.setAttribute("value", "ESTRUCTURA: " + selectedSample.name);
-          if (code) code.setAttribute("value", selectedSample.code);
+          if (code) code.setAttribute("value", indentCode(selectedSample.code));
 
           if (metrics) {
             metrics.setAttribute(
               "value",
-              "RESUMEN METRICAS ESTRUCTURALES:\n" +
+              "RESUMEN DE MÉTRICAS ESTRUCTURALES:\n" +
                 formatAstMetrics(selectedSample) +
-                "\n\nEXPLICACION:\n" + selectedSample.explain,
+                "\n\nEXPLICACIÓN:\n" + selectedSample.explain,
             );
           }
           if (recommendation) {
             recommendation.setAttribute(
               "value",
-              "RECOMENDACIONES DE OPTIMIZACION:\n" + selectedSample.recommend,
+              "RECOMENDACIONES DE OPTIMIZACIÓN:\n" + selectedSample.recommend,
             );
           }
         }
@@ -5873,7 +6198,7 @@
             { key: "sigma", label: "sigma", min: 0.0001, step: 0.1 },
           ],
           defaults: { mu: 0, sigma: 1 },
-          description: "Modelo continuo simetrico usado para errores, mediciones y fenomenos agregados.",
+          description: "Modelo continuo simétrico usado para errores, mediciones y fenómenos agregados.",
         },
         {
           id: "student",
@@ -5881,7 +6206,7 @@
           kind: "continuous",
           parameters: [{ key: "df", label: "nu", min: 0.0001, step: 1 }],
           defaults: { df: 8 },
-          description: "Distribucion simetrica con colas pesadas, frecuente en muestras pequenas.",
+          description: "Distribución simétrica con colas pesadas, frecuente en muestras pequeñas.",
         },
         {
           id: "chiSquared",
@@ -5889,18 +6214,18 @@
           kind: "continuous",
           parameters: [{ key: "df", label: "nu", min: 0.0001, step: 1 }],
           defaults: { df: 4 },
-          description: "Distribucion positiva asociada a sumas de cuadrados de normales estandar.",
+          description: "Distribución positiva asociada a sumas de cuadrados de normales estándar.",
         },
         {
           id: "fDistribution",
-          name: "Distribucion F",
+          name: "Distribución F",
           kind: "continuous",
           parameters: [
             { key: "df1", label: "nu1", min: 0.0001, step: 1 },
             { key: "df2", label: "nu2", min: 0.0001, step: 1 },
           ],
           defaults: { df1: 5, df2: 12 },
-          description: "Distribucion positiva para razones de varianzas independientes.",
+          description: "Distribución positiva para razones de varianzas independientes.",
         },
         {
           id: "exponential",
@@ -5919,7 +6244,7 @@
             { key: "gamma", label: "gamma", min: 0.0001, step: 0.1 },
           ],
           defaults: { x0: 0, gamma: 1 },
-          description: "Distribucion simetrica de colas muy pesadas, sin media ni varianza definidas.",
+          description: "Distribución simétrica de colas muy pesadas, sin media ni varianza definidas.",
         },
         {
           id: "weibull",
@@ -5941,7 +6266,7 @@
             { key: "theta", label: "theta", min: 0.0001, step: 0.1 },
           ],
           defaults: { alpha: 2, theta: 1 },
-          description: "Distribucion positiva para tiempos acumulados y variables sesgadas.",
+          description: "Distribución positiva para tiempos acumulados y variables sesgadas.",
         },
         {
           id: "beta",
@@ -5952,7 +6277,7 @@
             { key: "beta", label: "beta", min: 0.0001, step: 0.1 },
           ],
           defaults: { alpha: 2, beta: 5 },
-          description: "Distribucion sobre [0, 1], ideal para proporciones.",
+          description: "Distribución sobre [0, 1], ideal para proporciones.",
         },
         {
           id: "logNormal",
@@ -5967,14 +6292,14 @@
         },
         {
           id: "logistic",
-          name: "Logistica",
+          name: "Logística",
           kind: "continuous",
           parameters: [
             { key: "mu", label: "mu", step: 0.1 },
             { key: "s", label: "s", min: 0.0001, step: 0.1 },
           ],
           defaults: { mu: 0, s: 1 },
-          description: "Distribucion simetrica similar a la normal, con acumulada sigmoide.",
+          description: "Distribución simétrica similar a la normal, con acumulada sigmoide.",
         },
         {
           id: "uniformDiscrete",
@@ -5993,7 +6318,7 @@
             { key: "p", label: "p", min: 0, max: 1, step: 0.05 },
           ],
           defaults: { n: 10, p: 0.4 },
-          description: "Cuenta exitos en un numero fijo de ensayos independientes.",
+          description: "Cuenta éxitos en un número fijo de ensayos independientes.",
         },
         {
           id: "negativeBinomial",
@@ -6004,7 +6329,7 @@
             { key: "p", label: "p", min: 0, max: 1, step: 0.05 },
           ],
           defaults: { r: 4, p: 0.45 },
-          description: "Cuenta fallos antes de alcanzar una cantidad fija de exitos.",
+          description: "Cuenta fallos antes de alcanzar una cantidad fija de éxitos.",
         },
         {
           id: "poisson",
@@ -6016,7 +6341,7 @@
         },
         {
           id: "hypergeometric",
-          name: "Hipergeometrica",
+          name: "Hipergeométrica",
           kind: "discrete",
           parameters: [
             { key: "N", label: "N", min: 1, step: 1, integer: true },
@@ -6024,7 +6349,7 @@
             { key: "n", label: "n", min: 1, step: 1, integer: true },
           ],
           defaults: { N: 40, K: 12, n: 8 },
-          description: "Cuenta exitos al muestrear sin reemplazo desde una poblacion finita.",
+          description: "Cuenta éxitos al muestrear sin reemplazo desde una población finita.",
         },
       ];
 
@@ -6060,7 +6385,7 @@
           intervalType: "between",
           a: 2,
           b: 6,
-          description: "Poisson: cuenta autos por minuto con tasa media lambda.",
+          description: "Poisson: cuenta autos por minuto con tasa media λ.",
           pending: false,
         },
       ];
@@ -6074,7 +6399,7 @@
         observedSamples: [],
         lastCoinFlips: [],
         trialCount: 0,
-        lastOutcome: "Elegi una maquina y activa el experimento.",
+        lastOutcome: "Elegí una máquina y activá el experimento.",
         machineRunning: false,
       };
 
@@ -6473,7 +6798,7 @@
         var errors = [];
         distribution.parameters.forEach(function (parameter) {
           var current = params[parameter.key];
-          if (!Number.isFinite(current)) errors.push(parameter.label + " debe ser numerico.");
+          if (!Number.isFinite(current)) errors.push(parameter.label + " debe ser numérico.");
           if (parameter.integer && !Number.isInteger(current)) errors.push(parameter.label + " debe ser entero.");
           if (parameter.min !== undefined && current < parameter.min) errors.push(parameter.label + " debe ser >= " + parameter.min + ".");
           if (parameter.max !== undefined && current > parameter.max) errors.push(parameter.label + " debe ser <= " + parameter.max + ".");
@@ -6522,7 +6847,7 @@
         probabilityState.intervalType = station.intervalType;
         probabilityState.a = station.a;
         probabilityState.b = station.b;
-        resetProbabilityObserved(station.pending ? station.description : "Estacion activa: " + station.label);
+        resetProbabilityObserved(station.pending ? station.description : "Estación activa: " + station.label);
       }
 
       function resetProbabilityForDistribution() {
@@ -6613,7 +6938,7 @@
         probabilityState.trialCount = probabilityState.observedSamples.length;
         var last = values[values.length - 1];
         probabilityState.lastOutcome =
-          "Ultimo: " + formatProbNumber(last, 2) +
+          "Último: " + formatProbNumber(last, 2) +
           "\nGenerados: +" + times +
           "\nTotal: " + probabilityState.trialCount;
       }
@@ -6657,7 +6982,7 @@
             if (parameter.min !== undefined) nextValue = Math.max(parameter.min, nextValue);
             if (parameter.max !== undefined) nextValue = Math.min(parameter.max, nextValue);
             probabilityState.parameters[key] = Number(nextValue.toFixed(4));
-            resetProbabilityObserved("Parametro actualizado. Genera nuevos datos.");
+            resetProbabilityObserved("Parámetro actualizado. Generá nuevos datos.");
           }
         }
         renderProbabilityLab();
@@ -6672,7 +6997,7 @@
         if (type === "left") return "Cola izquierda: X <= a";
         if (type === "right") return "Cola derecha: X >= a";
         if (type === "outside") return "Exterior: X <= a o X >= b";
-        return "Entre limites: a <= X <= b";
+        return "Entre límites: a <= X <= b";
       }
 
       function isValueIncluded(type, x, a, b) {
@@ -6932,7 +7257,7 @@
             scale: "0.42 0.42 0.42",
           });
           addText(root, {
-            value: config.subtitle || "Estos valores cambian la distribucion teorica.",
+            value: config.subtitle || "Estos valores cambian la distribución teórica.",
             position: "0 " + config.subtitleY + " 0.04",
             align: "center",
             color: "#BFDBFE",
@@ -6945,7 +7270,7 @@
           addParameterRow({
             key: "n",
             symbol: "n",
-            title: "Numero de ensayos",
+            title: "Número de ensayos",
             y: "0.14",
             digits: 0,
             symbolScale: "1.35 1.35 1.35",
@@ -6953,7 +7278,7 @@
           addParameterRow({
             key: "p",
             symbol: "p",
-            title: "Probabilidad de exito",
+            title: "Probabilidad de éxito",
             y: "-0.33",
             digits: 2,
             symbolScale: "1.35 1.35 1.35",
@@ -6975,7 +7300,7 @@
           addParameterRow({
             key: "m",
             symbol: "m",
-            title: "Numero de posibles resultados (caras)",
+            title: "Número de resultados posibles (caras)",
             subtitle: "caras",
             y: "0.06",
             digits: 0,
@@ -7007,7 +7332,7 @@
             material: "side: double; transparent: true",
           });
           addText(root, {
-            value: "Parametro",
+            value: "Parámetro",
             position: "-1.65 0.18 0.04",
             align: "left",
             color: "#FFFFFF",
@@ -7032,9 +7357,9 @@
           });
           addParameterRow({
             key: "lambda",
-            symbol: "lambda",
-            title: "lambda",
-            subtitle: "Parametro de Poisson (lambda)",
+            symbol: "λ",
+            title: "Tasa media de autos",
+            subtitle: "Parámetro de Poisson (λ)",
             y: "-0.12",
             digits: 1,
             valueX: "0.45",
@@ -7052,7 +7377,7 @@
             material: "side: double; transparent: true",
           });
           addCenteredModelText({
-            title: "Modelo de Poisson: X ~ Poisson(lambda)",
+            title: "Modelo de Poisson: X ~ Poisson(λ)",
             titleY: "-0.85",
             subtitleY: "-1.06",
           });
@@ -7193,7 +7518,7 @@
         var last = probabilityState.activeStation === "dice" && probabilityState.observedSamples.length
           ? Math.round(probabilityState.observedSamples[probabilityState.observedSamples.length - 1])
           : "?";
-        setTextIfPresent(lab, "#prob-dice-result", last === "?" ? "Tira el dado" : "Salio: " + last);
+        setTextIfPresent(lab, "#prob-dice-result", last === "?" ? "Tirá el dado" : "Salió: " + last);
         var cube = lab.querySelector("#prob-dice-cube");
         if (cube && probabilityState.machineRunning && probabilityState.activeStation === "dice") {
           var finalRotations = {
@@ -7250,7 +7575,7 @@
           ? probabilityState.observedSamples[probabilityState.observedSamples.length - 1]
           : null;
         var coinLast = station.id === "coin" && last !== null ? Math.round(last) : null;
-        setTextIfPresent(lab, "#prob-coin-display", coinLast === null ? "Simula 10 monedas\nCara = exito" : "Caras: " + coinLast + " de 10\nCruces: " + (10 - coinLast));
+        setTextIfPresent(lab, "#prob-coin-display", coinLast === null ? "Simulá 10 monedas\nCara = éxito" : "Caras: " + coinLast + " de 10\nCruces: " + (10 - coinLast));
         setTextIfPresent(lab, "#prob-dice-display", "Dado justo: caras 1 a 6\nTiradas: " + probabilityState.trialCount);
         setTextIfPresent(lab, "#prob-calls-display", "λ = " + formatProbNumber(probabilityState.parameters.lambda || 3, 1) + " autos/min\nMinuto actual: " + probabilityState.trialCount + "\nAutos que pasaron: " + (station.id === "calls" && last !== null ? Math.round(last) : "-"));
         renderCoinVisuals(lab);
@@ -7294,10 +7619,10 @@
         var resultText = lab.querySelector("#prob-result");
         var outcomeText = lab.querySelector("#prob-last-outcome");
         if (title) {
-          var boardTitle = "Distribucion observada";
-          if (station.id === "coin") boardTitle = "Distribucion binomial";
-          if (station.id === "dice") boardTitle = "Distribucion uniforme discreta";
-          if (station.id === "calls") boardTitle = "Distribucion de Poisson";
+          var boardTitle = "Distribución observada";
+          if (station.id === "coin") boardTitle = "Distribución binomial";
+          if (station.id === "dice") boardTitle = "Distribución uniforme discreta";
+          if (station.id === "calls") boardTitle = "Distribución de Poisson";
           title.setAttribute(
             "value",
             boardTitle,
@@ -7321,7 +7646,7 @@
             theoryText =
               "Experimento: contar autos durante 1 minuto\n" +
               "X = cantidad de autos que pasan\n" +
-              "Modelo: X ~ Poisson(lambda = " + lambda + ")";
+              "Modelo: X ~ Poisson(λ = " + lambda + ")";
           }
           theoryBlock.setAttribute(
             "value",
@@ -7331,11 +7656,11 @@
         if (chartExplanation) {
           var chartText = "";
           if (station.id === "coin") {
-            chartText = "La grafica muestra la probabilidad teorica de obtener 0 a 10 caras.";
+            chartText = "La gráfica muestra la probabilidad teórica de obtener de 0 a 10 caras.";
           } else if (station.id === "dice") {
-            chartText = "La grafica muestra que cada cara tiene la misma probabilidad.";
+            chartText = "La gráfica muestra que cada cara tiene la misma probabilidad.";
           } else if (station.id === "calls") {
-            chartText = "La grafica muestra la probabilidad de contar distintas cantidades de autos por minuto.";
+            chartText = "La gráfica muestra la probabilidad de contar distintas cantidades de autos por minuto.";
           }
           chartExplanation.setAttribute(
             "value",
@@ -7370,22 +7695,22 @@
         if (resultText) {
           var observedLegend = probabilityState.observedSamples.length > 0
             ? "\nBarra roja: resultado simulado"
-            : "\nResultado simulado: aparecera al ejecutar";
+            : "\nResultado simulado: aparecerá al ejecutar";
           resultText.setAttribute(
             "value",
             errors.length
-              ? "Corrige datos: " + errors.join(" ")
-              : "Barras doradas: probabilidad teorica" + observedLegend,
+              ? "Corregí los datos: " + errors.join(" ")
+              : "Barras doradas: probabilidad teórica" + observedLegend,
           );
         }
         if (outcomeText) {
-          var initialMessage = "Activa una maquina para generar datos.";
+          var initialMessage = "Activá una máquina para generar datos.";
           if (station.id === "coin") {
-            initialMessage = "Lanza 10 monedas y compara el resultado con la distribucion teorica.";
+            initialMessage = "Lanzá 10 monedas y compará el resultado con la distribución teórica.";
           } else if (station.id === "dice") {
-            initialMessage = "Lanza el dado y compara el resultado con la distribucion teorica.";
+            initialMessage = "Lanzá el dado y compará el resultado con la distribución teórica.";
           } else if (station.id === "calls") {
-            initialMessage = "Avanza un minuto y compara la cantidad de autos con la distribucion teorica.";
+            initialMessage = "Avanzá un minuto y compará la cantidad de autos con la distribución teórica.";
           }
           outcomeText.setAttribute(
             "value",
@@ -7420,11 +7745,11 @@
         // Detener animaciones activas
         if (typeof mruvSimulationRunning !== "undefined" && mruvSimulationRunning) {
           mruvSimulationRunning = false;
-          if (mruvAnimationId) { cancelAnimationFrame(mruvAnimationId); mruvAnimationId = null; }
+          if (mruvAnimationId) { cancelFrame(mruvAnimationId); mruvAnimationId = null; }
         }
         if (typeof mruSimulationRunning !== "undefined" && mruSimulationRunning) {
           mruSimulationRunning = false;
-          if (mruAnimationId) { cancelAnimationFrame(mruAnimationId); mruAnimationId = null; }
+          if (mruAnimationId) { cancelFrame(mruAnimationId); mruAnimationId = null; }
         }
         var aula4 = document.getElementById("aula4");
         if (!aula4) return;
@@ -7525,7 +7850,7 @@
             var newX = getMRUVPosition(elapsed);
             car.setAttribute("position", newX + " 0 0");
             updateMRUVInfo(elapsed);
-            mruvAnimationId = requestAnimationFrame(animateMRUV);
+            mruvAnimationId = nextFrame(animateMRUV);
           } else {
             // Simulación completada
             mruvSimulationRunning = false;
@@ -7542,8 +7867,8 @@
         updateMRUVInfo(0);
 
         // Iniciar animación
-        if (mruvAnimationId) cancelAnimationFrame(mruvAnimationId);
-        mruvAnimationId = requestAnimationFrame(animateMRUV);
+        if (mruvAnimationId) cancelFrame(mruvAnimationId);
+        mruvAnimationId = nextFrame(animateMRUV);
       }
 
       function showMRUVResults() {
@@ -7640,7 +7965,7 @@
           if (elapsed <= t_total) {
             car.setAttribute("position", getMRUPosition(elapsed) + " 0 0");
             updateMRUInfo(elapsed);
-            mruAnimationId = requestAnimationFrame(animateMRU);
+            mruAnimationId = nextFrame(animateMRU);
           } else {
             mruSimulationRunning = false;
             car.setAttribute("position", getMRUPosition(t_total) + " 0 0");
@@ -7653,8 +7978,8 @@
         mruSimulationStartTime = 0;
         car.setAttribute("position", initialX + " 0 0");
         updateMRUInfo(0);
-        if (mruAnimationId) cancelAnimationFrame(mruAnimationId);
-        mruAnimationId = requestAnimationFrame(animateMRU);
+        if (mruAnimationId) cancelFrame(mruAnimationId);
+        mruAnimationId = nextFrame(animateMRU);
       }
 
      function showMRUResults() {
@@ -7678,8 +8003,8 @@
         var text =
           "RESPUESTAS:\n\n" +
           "1. Distancia en " + t1 + " segundos:\n" +
-          "   x = v x t\n" +
-          "   x = " + v + " x " + t1 + "\n" +
+          "   x = v × t\n" +
+          "   x = " + v + " × " + t1 + "\n" +
           "   x = " + x1 + " metros\n\n" +
           "2. Tiempo para " + x2 + " metros:\n" +
           "   t = x / v\n" +
@@ -7706,9 +8031,10 @@
           document.querySelector(".info-panel").style.display = "none";
           var hud = document.getElementById("mathHUD");
           if (hud) hud.style.display = "none";
-          // Ocultar cursor gaze en VR (se usan laser-controls de los controladores)
+          // Ocultar cursor gaze en visores (se usan laser-controls de los controladores).
+          // En el celular (Cardboard) el círculo es la única forma de apuntar.
           var cursor = document.querySelector("a-cursor");
-          if (cursor) cursor.setAttribute("visible", false);
+          if (cursor && !IS_TOUCH_PHONE) cursor.setAttribute("visible", false);
         });
         scene.addEventListener("exit-vr", function () {
           document.querySelector(".info-panel").style.display = "block";
